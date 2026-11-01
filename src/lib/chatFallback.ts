@@ -26,22 +26,34 @@ function cleanQuotedValue(value: string): string {
   return value.trim().replace(/^["']|["']$/g, '').trim();
 }
 
+function findExactMatch<T>(
+  items: T[],
+  target: string,
+  getId: (item: T) => string,
+  getName: (item: T) => string
+): T | undefined {
+  const cleanedTarget = cleanQuotedValue(target);
+  if (!cleanedTarget) return undefined;
+  const normalizedName = cleanedTarget.toLowerCase();
+  const idMatches = items.filter((item) => getId(item) === cleanedTarget);
+  if (idMatches.length > 0) return idMatches.length === 1 ? idMatches[0] : undefined;
+
+  const nameMatches = items.filter((item) => getName(item).toLowerCase() === normalizedName);
+  return nameMatches.length === 1 ? nameMatches[0] : undefined;
+}
+
 function matchTask(plan: CelebrationPlan, target: string) {
-  const normalized = cleanQuotedValue(target).toLowerCase();
-  if (!normalized) return undefined;
-  return plan.timeline.find((task) => task.id.toLowerCase() === normalized) ??
-    plan.timeline.find((task) => task.title.toLowerCase() === normalized) ??
-    plan.timeline.find((task) => task.title.toLowerCase().includes(normalized));
+  return findExactMatch(plan.timeline, target, (task) => task.id, (task) => task.title);
 }
 
 function matchVendor(plan: CelebrationPlan, target: string) {
-  const normalized = cleanQuotedValue(target).toLowerCase();
-  if (!normalized) return undefined;
-  return plan.vendors.find((vendor) => vendor.id.toLowerCase() === normalized) ??
-    plan.vendors.find((vendor) => vendor.name.toLowerCase() === normalized) ??
-    plan.vendors.find((vendor) =>
-      vendor.name.toLowerCase().includes(normalized) || vendor.category.toLowerCase().includes(normalized)
-    );
+  return findExactMatch(plan.vendors, target, (vendor) => vendor.id, (vendor) => vendor.name);
+}
+
+function unresolvedTarget(kind: 'task' | 'vendor'): LocalChatResponse {
+  return unsupported(
+    `I could not identify a unique ${kind}. Please clarify using its exact ID or full name.`
+  );
 }
 
 function unsupported(detail?: string): LocalChatResponse {
@@ -110,7 +122,7 @@ export function parseLocalChatRequest(message: string, plan: CelebrationPlan): L
   if (taskRenameMatch) {
     const task = matchTask(plan, taskRenameMatch[1]);
     const title = cleanQuotedValue(taskRenameMatch[2]);
-    if (!task) return unsupported('I could not find that task.');
+    if (!task) return unresolvedTarget('task');
     if (title.length < 2 || title.length > 150) return unsupported('Task titles must be between 2 and 150 characters.');
     return {
       reply: `Updated the task title to "${title}".`,
@@ -122,7 +134,7 @@ export function parseLocalChatRequest(message: string, plan: CelebrationPlan): L
   if (taskMoveMatch) {
     const task = matchTask(plan, taskMoveMatch[1]);
     const daysBeforeEvent = Number(taskMoveMatch[2]);
-    if (!task) return unsupported('I could not find that task.');
+    if (!task) return unresolvedTarget('task');
     if (daysBeforeEvent > 365) return unsupported('Task timing must be between 0 and 365 days before the event.');
     return {
       reply: `Moved "${task.title}" to ${daysBeforeEvent} days before the event.`,
@@ -136,7 +148,7 @@ export function parseLocalChatRequest(message: string, plan: CelebrationPlan): L
     const target = taskStatusMatch?.[1] ?? taskVerbMatch?.[2] ?? '';
     const status = taskStatusMatch?.[2].toLowerCase() ?? taskVerbMatch?.[1].toLowerCase() ?? '';
     const task = matchTask(plan, target);
-    if (!task) return unsupported('I could not find that task.');
+    if (!task) return unresolvedTarget('task');
     const completed = !['incomplete', 'pending', 'open', 'reopen'].includes(status);
     return {
       reply: `${completed ? 'Completed' : 'Reopened'} "${task.title}".`,
@@ -195,7 +207,7 @@ export function parseLocalChatRequest(message: string, plan: CelebrationPlan): L
   const vendorStatusMatch = text.match(/^(?:mark|set|update)\s+(?:the\s+)?(?:vendor\s+)?(.+?)\s+(?:as\s+)?(booked|contacted|to contact)$/i);
   if (vendorStatusMatch) {
     const vendor = matchVendor(plan, vendorStatusMatch[1]);
-    if (!vendor) return unsupported('I could not find that vendor.');
+    if (!vendor) return unresolvedTarget('vendor');
     const status = vendorStatusMatch[2].toLowerCase() === 'to contact'
       ? 'To contact'
       : vendorStatusMatch[2].toLowerCase() === 'contacted' ? 'Contacted' : 'Booked';

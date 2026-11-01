@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 import { EventType, CurrencyCode, GenerationModule, PlanRequestInput } from '../types/plan';
 import { GENERATION_MODULES, INFORMATIONAL_MODULES } from '../lib/generationModules';
 import { addDaysToDateOnly, getLocalDateOnly } from '../lib/dateOnly';
@@ -12,12 +12,100 @@ interface CommandCenterModalProps {
   isLoading: boolean;
 }
 
+interface ArchetypePreset {
+  label: string;
+  eventName: string;
+  guests: number;
+  inrBudget: number;
+  otherCurrencyBudget: number;
+  city: string;
+  vibeNotes: string;
+}
+
+const ARCHETYPE_PRESET_TYPES = ['wedding', 'birthday', 'community'] as const satisfies readonly EventType[];
+
+const ARCHETYPE_PRESETS: Record<EventType, ArchetypePreset> = {
+  wedding: {
+    label: '💍 Royal Wedding',
+    eventName: 'Ananya & Rohan’s Royal Wedding',
+    guests: 350,
+    inrBudget: 1800000,
+    otherCurrencyBudget: 25000,
+    city: 'Jaipur',
+    vibeNotes: 'Royal Rajasthani heritage vibe, multi-day Sangeet & Haldi, focus on live kesar sweets and cinematic photo reel',
+  },
+  birthday: {
+    label: '🎂 Milestone Birthday',
+    eventName: 'Kabir’s 30th Neon Rooftop Jubilee',
+    guests: 45,
+    inrBudget: 120000,
+    otherCurrencyBudget: 3500,
+    city: 'Mumbai',
+    vibeNotes: 'Cyberpunk neon lighting, 360 glambot, artisanal gin cocktail counter, midnight surprise DJ set',
+  },
+  community: {
+    label: '🎪 Community Fest',
+    eventName: 'Indiranagar Diwali Utsav & Carnival',
+    guests: 400,
+    inrBudget: 450000,
+    otherCurrencyBudget: 8000,
+    city: 'Bengaluru',
+    vibeNotes: 'Community cultural evening, live stage line-array sound, food stalls, volunteer coordination, zero-waste',
+  },
+};
+
+interface ArchetypePresetSelectorProps {
+  selectedType: EventType;
+  onSelect: (type: EventType) => void;
+}
+
+const ArchetypePresetSelector: React.FC<ArchetypePresetSelectorProps> = ({
+  selectedType,
+  onSelect,
+}) => (
+  <div className="mb-6 rounded-xs border border-white/10 bg-black/40 p-3.5">
+    <div className="flex items-center justify-between mb-2">
+      <span className="text-[10px] font-mono-code uppercase text-zinc-400">
+        QUICK ARCHETYPE PRESETS:
+      </span>
+      <span className="text-[10px] text-zinc-400 font-mono-code">Autofills baseline fields</span>
+    </div>
+    <div className="flex flex-wrap gap-2">
+      {ARCHETYPE_PRESET_TYPES.map((type) => (
+        <button
+          key={type}
+          type="button"
+          aria-pressed={selectedType === type}
+          onClick={() => onSelect(type)}
+          className={`px-3 py-1.5 text-xs font-mono-code uppercase rounded-xs transition-all cursor-pointer ${
+            selectedType === type
+              ? 'bg-[#0066ff] text-white font-semibold shadow-[0_0_12px_rgba(0,102,255,0.4)]'
+              : 'bg-white/5 text-zinc-300 hover:bg-white/10 border border-white/10'
+          }`}
+        >
+          {ARCHETYPE_PRESETS[type].label}
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
 export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
   isLoading,
 }) => {
+  const instanceId = useId().replace(/:/g, '');
+  const inputIds = {
+    eventName: `${instanceId}-command-event-name`,
+    date: `${instanceId}-command-event-date`,
+    guests: `${instanceId}-command-guests`,
+    currency: `${instanceId}-command-currency`,
+    budget: `${instanceId}-command-budget`,
+    city: `${instanceId}-command-city`,
+    vibeNotes: `${instanceId}-command-vibe-notes`,
+  };
   const [eventType, setEventType] = useState<EventType>('wedding');
   const [eventName, setEventName] = useState('Ananya & Rohan’s Royal Wedding');
   const [date, setDate] = useState(() => addDaysToDateOnly(getLocalDateOnly(), 90));
@@ -32,7 +120,7 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
   // Selected modules
   const [selectedModules, setSelectedModules] = useState<GenerationModule[]>([...GENERATION_MODULES]);
   const dialogRef = useRef<HTMLDialogElement>(null);
-  useDialogAccessibility(isOpen, onClose, dialogRef, '#command-event-name');
+  useDialogAccessibility(isOpen, onClose, dialogRef, `#${inputIds.eventName}`);
 
   if (!isOpen) return null;
 
@@ -43,26 +131,13 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
   };
 
   const handleApplyPreset = (type: EventType) => {
+    const preset = ARCHETYPE_PRESETS[type];
     setEventType(type);
-    if (type === 'wedding') {
-      setEventName('Ananya & Rohan’s Royal Wedding');
-      setGuests(350);
-      setTotalBudget(currency === 'INR' ? 1800000 : 25000);
-      setCity('Jaipur');
-      setVibeNotes('Royal Rajasthani heritage vibe, multi-day Sangeet & Haldi, focus on live kesar sweets and cinematic photo reel');
-    } else if (type === 'birthday') {
-      setEventName('Kabir’s 30th Neon Rooftop Jubilee');
-      setGuests(45);
-      setTotalBudget(currency === 'INR' ? 120000 : 3500);
-      setCity('Mumbai');
-      setVibeNotes('Cyberpunk neon lighting, 360 glambot, artisanal gin cocktail counter, midnight surprise DJ set');
-    } else {
-      setEventName('Indiranagar Diwali Utsav & Carnival');
-      setGuests(400);
-      setTotalBudget(currency === 'INR' ? 450000 : 8000);
-      setCity('Bengaluru');
-      setVibeNotes('Community cultural evening, live stage line-array sound, food stalls, volunteer coordination, zero-waste');
-    }
+    setEventName(preset.eventName);
+    setGuests(preset.guests);
+    setTotalBudget(currency === 'INR' ? preset.inrBudget : preset.otherCurrencyBudget);
+    setCity(preset.city);
+    setVibeNotes(preset.vibeNotes);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -86,7 +161,7 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
       ref={dialogRef}
       className="readable-content fixed inset-0 z-50 flex items-start justify-center bg-black/85 p-3 sm:items-center sm:p-6 backdrop-blur-md overflow-y-auto"
       aria-modal="true"
-      aria-labelledby="command-center-title"
+      aria-labelledby={`${instanceId}-command-center-title`}
       tabIndex={-1}
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -103,7 +178,7 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
               <span className="text-[10px] uppercase font-mono-code tracking-widest text-[#0066ff] block">
                 COMMAND CENTER // ARCHITECTURAL BRIEF
               </span>
-              <h2 id="command-center-title" className="text-xl font-medium text-white font-serif-display uppercase">
+              <h2 id={`${instanceId}-command-center-title`} className="text-xl font-medium text-white font-serif-display uppercase">
                 Initiate Celebration Plan
               </h2>
             </div>
@@ -118,33 +193,7 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
           </button>
         </div>
 
-        {/* Preset Selector Chips */}
-        <div className="mb-6 rounded-xs border border-white/10 bg-black/40 p-3.5">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-mono-code uppercase text-zinc-400">
-              QUICK ARCHETYPE PRESETS:
-            </span>
-            <span className="text-[10px] text-zinc-400 font-mono-code">Autofills baseline fields</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {(['wedding', 'birthday', 'community'] as const).map((type) => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => handleApplyPreset(type)}
-                className={`px-3 py-1.5 text-xs font-mono-code uppercase rounded-xs transition-all cursor-pointer ${
-                  eventType === type
-                    ? 'bg-[#0066ff] text-white font-semibold shadow-[0_0_12px_rgba(0,102,255,0.4)]'
-                    : 'bg-white/5 text-zinc-300 hover:bg-white/10 border border-white/10'
-                }`}
-              >
-                {type === 'wedding' && '💍 Royal Wedding'}
-                {type === 'birthday' && '🎂 Milestone Birthday'}
-                {type === 'community' && '🎪 Community Fest'}
-              </button>
-            ))}
-          </div>
-        </div>
+        <ArchetypePresetSelector selectedType={eventType} onSelect={handleApplyPreset} />
 
         {/* Modules Selection Chips */}
         <div className="mb-6">
@@ -166,6 +215,7 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
                 <button
                   key={mod}
                   type="button"
+                  aria-pressed={isSelected}
                   onClick={() => toggleModule(mod)}
                   className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono-code rounded-xs transition-all cursor-pointer ${
                     isSelected
@@ -202,11 +252,11 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-[11px] font-mono-code uppercase text-zinc-400 block mb-1">
+              <label htmlFor={inputIds.eventName} className="text-[11px] font-mono-code uppercase text-zinc-400 block mb-1">
                 Event Name / Title
               </label>
               <input
-                id="command-event-name"
+                id={inputIds.eventName}
                 type="text"
                 required
                 value={eventName}
@@ -216,10 +266,11 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
             </div>
 
             <div>
-              <label className="text-[11px] font-mono-code uppercase text-zinc-400 block mb-1">
+              <label htmlFor={inputIds.date} className="text-[11px] font-mono-code uppercase text-zinc-400 block mb-1">
                 Target Date
               </label>
               <input
+                id={inputIds.date}
                 type="date"
                 required
                 value={date}
@@ -229,10 +280,11 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
             </div>
 
             <div>
-              <label className="text-[11px] font-mono-code uppercase text-zinc-400 block mb-1">
+              <label htmlFor={inputIds.guests} className="text-[11px] font-mono-code uppercase text-zinc-400 block mb-1">
                 Guest Headcount
               </label>
               <input
+                id={inputIds.guests}
                 type="number"
                 min="1"
                 max="10000"
@@ -245,10 +297,11 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
 
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <label className="text-[11px] font-mono-code uppercase text-zinc-400 block mb-1">
+                <label htmlFor={inputIds.currency} className="text-[11px] font-mono-code uppercase text-zinc-400 block mb-1">
                   Currency
                 </label>
                 <select
+                  id={inputIds.currency}
                   value={currency}
                   onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
                   className="w-full rounded-xs border border-white/15 bg-[#14141a] px-2 py-2 text-xs text-white font-mono-code focus:border-[#0066ff] focus:outline-none"
@@ -261,10 +314,11 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
               </div>
 
               <div className="col-span-2">
-                <label className="text-[11px] font-mono-code uppercase text-zinc-400 block mb-1">
+                <label htmlFor={inputIds.budget} className="text-[11px] font-mono-code uppercase text-zinc-400 block mb-1">
                   Total Budget ({currency})
                 </label>
                 <input
+                  id={inputIds.budget}
                   type="number"
                   min="1000"
                   step="1000"
@@ -277,10 +331,11 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
             </div>
 
             <div className="sm:col-span-2">
-              <label className="text-[11px] font-mono-code uppercase text-zinc-400 block mb-1">
+              <label htmlFor={inputIds.city} className="text-[11px] font-mono-code uppercase text-zinc-400 block mb-1">
                 Host City / Region
               </label>
               <input
+                id={inputIds.city}
                 type="text"
                 required
                 placeholder="e.g. Jaipur, Mumbai, Bengaluru, New Delhi, London"
@@ -291,10 +346,11 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
             </div>
 
             <div className="sm:col-span-2">
-              <label className="text-[11px] font-mono-code uppercase text-zinc-400 block mb-1">
+              <label htmlFor={inputIds.vibeNotes} className="text-[11px] font-mono-code uppercase text-zinc-400 block mb-1">
                 Vibe, Rituals &amp; Operational Constraints
               </label>
               <textarea
+                id={inputIds.vibeNotes}
                 rows={3}
                 placeholder="Detail cultural elements (Haldi/Sangeet), dietary choices, noise limits, special entertainment requests..."
                 value={vibeNotes}

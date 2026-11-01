@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { CelebrationPlan, ChatResponseSchema, PlanOperation } from '../types/plan';
+import React, { useId, useRef, useState } from 'react';
+import { CelebrationPlan, ChatResponseSchema, MAX_TIMELINE_TASKS, PlanOperation } from '../types/plan';
 import { applyOperations, DiffDetail } from '../lib/operations';
 import { parseLocalChatRequest } from '../lib/chatFallback';
 import { useDialogAccessibility } from '../hooks/useDialogAccessibility';
@@ -12,6 +12,16 @@ interface ChatMessage {
   timestamp: string;
   diffs?: DiffDetail[];
   operationsCount?: number;
+}
+
+type LocalFallbackSource = 'empty-api-response' | 'request-error';
+const TASK_LIMIT_NOTICE = `A plan can contain up to ${MAX_TIMELINE_TASKS} tasks. Remove a task before adding another.`;
+
+function getTaskLimitNotice(plan: CelebrationPlan, operations: PlanOperation[]): string {
+  return plan.timeline.length >= MAX_TIMELINE_TASKS &&
+    operations.some((operation) => operation.type === 'addTask')
+    ? TASK_LIMIT_NOTICE
+    : '';
 }
 
 interface PlanChatModalProps {
@@ -31,6 +41,9 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
   canUndo,
   onUndo,
 }) => {
+  const instanceId = useId().replace(/:/g, '');
+  const chatInputId = `${instanceId}-chat-instruction`;
+  const titleId = `${instanceId}-chat-modal-title`;
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -43,7 +56,7 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [ariaLiveAnnouncement, setAriaLiveAnnouncement] = useState('');
   const dialogRef = useRef<HTMLDialogElement>(null);
-  useDialogAccessibility(isOpen, onClose, dialogRef, '#chat-instruction');
+  useDialogAccessibility(isOpen, onClose, dialogRef, `#${chatInputId}`);
 
   if (!isOpen) return null;
 
@@ -53,6 +66,50 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
     'Mark venue as Booked',
     'Add task: Schedule hair and makeup trial',
   ];
+
+  const handleLocalFallback = (text: string, source: LocalFallbackSource) => {
+    const localResponse = parseLocalChatRequest(text, plan);
+    const isRequestError = source === 'request-error';
+    const modePrefix = isRequestError ? 'Local mode: ' : '';
+    const messageIdPrefix = isRequestError ? 'local' : 'ai';
+
+    if (localResponse.operations.length > 0) {
+      const taskLimitNotice = getTaskLimitNotice(plan, localResponse.operations);
+      const { updatedPlan, diffs } = applyOperations(plan, localResponse.operations);
+      if (diffs.length > 0) {
+        const explanation = [localResponse.reply, taskLimitNotice].filter(Boolean).join(' ');
+        onPlanUpdated(updatedPlan, diffs, explanation);
+        setMessages((prev) => [...prev, {
+          id: `${messageIdPrefix}_${Date.now()}`,
+          sender: 'assistant',
+          text: `${modePrefix}${explanation}`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          diffs,
+          operationsCount: localResponse.operations.length,
+        }]);
+        setAriaLiveAnnouncement(
+          `Plan updated${isRequestError ? ' locally' : ''}: ${diffs.length} changes applied. ${explanation}`
+        );
+      } else {
+        const noChangeReply = taskLimitNotice || 'No plan changes were needed or applied.';
+        setMessages((prev) => [...prev, {
+          id: `${messageIdPrefix}_${Date.now()}`,
+          sender: 'assistant',
+          text: `${modePrefix}${noChangeReply}`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }]);
+        setAriaLiveAnnouncement(noChangeReply);
+      }
+    } else {
+      setMessages((prev) => [...prev, {
+        id: `${isRequestError ? 'err' : 'ai'}_${Date.now()}`,
+        sender: 'assistant',
+        text: `${modePrefix}${localResponse.reply}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }]);
+      setAriaLiveAnnouncement(localResponse.reply);
+    }
+  };
 
   const handleSend = async (messageText?: string) => {
     const textToSend = (messageText || input).trim();
@@ -92,26 +149,27 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
       let operations: PlanOperation[] = parsedResponse.data.operations;
       let reply = parsedResponse.data.reply;
       if (operations.length === 0) {
-        const localResponse = parseLocalChatRequest(textToSend, plan);
-        operations = localResponse.operations;
-        reply = localResponse.reply;
+        handleLocalFallback(textToSend, 'empty-api-response');
+        return;
       }
 
       if (operations.length > 0) {
+        const taskLimitNotice = getTaskLimitNotice(plan, operations);
         const { updatedPlan, diffs } = applyOperations(plan, operations);
         if (diffs.length > 0) {
-          onPlanUpdated(updatedPlan, diffs, reply);
+          const explanation = [reply, taskLimitNotice].filter(Boolean).join(' ');
+          onPlanUpdated(updatedPlan, diffs, explanation);
           setMessages((prev) => [...prev, {
             id: `ai_${Date.now()}`,
             sender: 'assistant',
-            text: reply,
+            text: explanation,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             diffs,
             operationsCount: operations.length,
           }]);
-          setAriaLiveAnnouncement(`Plan updated: ${diffs.length} changes applied. ${reply}`);
+          setAriaLiveAnnouncement(`Plan updated: ${diffs.length} changes applied. ${explanation}`);
         } else {
-          const noChangeReply = 'No plan changes were needed or applied.';
+          const noChangeReply = taskLimitNotice || 'No plan changes were needed or applied.';
           setMessages((prev) => [...prev, {
             id: `ai_${Date.now()}`,
             sender: 'assistant',
@@ -132,39 +190,7 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
       }
     } catch (err) {
       console.error('Chat error:', err);
-      const localResponse = parseLocalChatRequest(textToSend, plan);
-      if (localResponse.operations.length > 0) {
-        const { updatedPlan, diffs } = applyOperations(plan, localResponse.operations);
-        if (diffs.length > 0) {
-          onPlanUpdated(updatedPlan, diffs, localResponse.reply);
-          setMessages((prev) => [...prev, {
-            id: `local_${Date.now()}`,
-            sender: 'assistant',
-            text: `Local mode: ${localResponse.reply}`,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            diffs,
-            operationsCount: localResponse.operations.length,
-          }]);
-          setAriaLiveAnnouncement(`Plan updated locally: ${diffs.length} changes applied. ${localResponse.reply}`);
-        } else {
-          const noChangeReply = 'No plan changes were needed or applied.';
-          setMessages((prev) => [...prev, {
-            id: `local_${Date.now()}`,
-            sender: 'assistant',
-            text: `Local mode: ${noChangeReply}`,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          }]);
-          setAriaLiveAnnouncement(noChangeReply);
-        }
-      } else {
-        setMessages((prev) => [...prev, {
-          id: `err_${Date.now()}`,
-          sender: 'assistant',
-          text: `Local mode: ${localResponse.reply}`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        }]);
-        setAriaLiveAnnouncement(localResponse.reply);
-      }
+      handleLocalFallback(textToSend, 'request-error');
     } finally {
       setIsLoading(false);
     }
@@ -176,7 +202,7 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
       ref={dialogRef}
       className="readable-content fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-6 backdrop-blur-md"
       aria-modal="true"
-      aria-labelledby="chat-modal-title"
+      aria-labelledby={titleId}
       tabIndex={-1}
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -195,7 +221,7 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
               <Terminal className="h-4 w-4" />
             </span>
             <div>
-              <h3 id="chat-modal-title" className="text-sm font-semibold uppercase font-mono-code text-white">
+              <h3 id={titleId} className="text-sm font-semibold uppercase font-mono-code text-white">
                 Conversational Plan Editor
               </h3>
               <span className="text-[10px] text-zinc-400 font-mono-code">
@@ -308,8 +334,9 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
           className="border-t border-white/10 bg-[#101015] p-3 flex items-center gap-2"
         >
           <input
-            id="chat-instruction"
+            id={chatInputId}
             type="text"
+            aria-label="Plan instruction"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}

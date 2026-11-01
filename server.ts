@@ -17,6 +17,7 @@ import { normalizeBudgetCategories } from './src/lib/budget';
 import { applyGenerationModules } from './src/lib/generationModules';
 import { parseLocalChatRequest } from './src/lib/chatFallback';
 import { BoundedTokenBucket } from './src/lib/rateLimit';
+import { logSanitizedError } from './src/lib/sanitizedLogging';
 
 dotenv.config();
 
@@ -192,10 +193,12 @@ Vibe & Constraints: ${vibeNotes || 'None'}`;
         if (parsed.success) {
           aiPlan = parsed.data;
         } else {
-          console.warn('Anthropic returned invalid plan data:', parsed.error.issues);
+          console.warn('Anthropic returned invalid plan data.', {
+            issueCount: parsed.error.issues.length,
+          });
         }
-      } catch (anthropicErr) {
-        console.warn('Anthropic plan request failed.');
+      } catch (err) {
+        logSanitizedError('Anthropic plan request', err, 'warning');
       }
     }
 
@@ -217,10 +220,12 @@ Vibe & Constraints: ${vibeNotes || 'None'}`;
         if (parsed.success) {
           aiPlan = parsed.data;
         } else {
-          console.warn('Gemini returned invalid plan data:', parsed.error.issues);
+          console.warn('Gemini returned invalid plan data.', {
+            issueCount: parsed.error.issues.length,
+          });
         }
-      } catch (geminiErr) {
-        console.warn('Gemini plan request failed.');
+      } catch (err) {
+        logSanitizedError('Gemini plan request', err, 'warning');
       }
     }
 
@@ -289,7 +294,9 @@ Vibe & Constraints: ${vibeNotes || 'None'}`;
 
     const validatedPlan = CelebrationPlanSchema.safeParse(finalPlan);
     if (!validatedPlan.success) {
-      console.warn('Generated plan failed final validation; using built-in template:', validatedPlan.error.issues);
+      console.warn('Generated plan failed final validation; using built-in template.', {
+        issueCount: validatedPlan.error.issues.length,
+      });
       const template = getBuiltinTemplate(eventType, {
         eventName,
         date,
@@ -303,8 +310,8 @@ Vibe & Constraints: ${vibeNotes || 'None'}`;
     }
 
     return res.json(applyGenerationModules(validatedPlan.data, selectedModules));
-  } catch {
-    console.error('Plan generation failed.');
+  } catch (err) {
+    logSanitizedError('Plan generation', err, 'error');
     return res.status(500).json({ error: 'Internal server error while formulating plan' });
   }
 });
@@ -377,9 +384,11 @@ ${message}`;
         const responseData: unknown = JSON.parse(cleaned);
         const parsed = ChatResponseSchema.safeParse(responseData);
         if (parsed.success) aiResponse = parsed.data;
-        else console.warn('Anthropic returned an invalid chat response:', parsed.error);
-      } catch {
-      console.warn('Anthropic chat request failed.');
+        else console.warn('Anthropic returned an invalid chat response.', {
+          issueCount: parsed.error.issues.length,
+        });
+      } catch (err) {
+        logSanitizedError('Anthropic chat request', err, 'warning');
       }
     }
 
@@ -399,9 +408,11 @@ ${message}`;
         const responseData: unknown = JSON.parse(text);
         const parsed = ChatResponseSchema.safeParse(responseData);
         if (parsed.success) aiResponse = parsed.data;
-        else console.warn('Gemini returned an invalid chat response:', parsed.error);
-      } catch {
-        console.warn('Gemini chat request failed.');
+        else console.warn('Gemini returned an invalid chat response.', {
+          issueCount: parsed.error.issues.length,
+        });
+      } catch (err) {
+        logSanitizedError('Gemini chat request', err, 'warning');
       }
     }
 
@@ -413,8 +424,8 @@ ${message}`;
       reply: aiResponse.reply,
       operations: aiResponse.operations,
     });
-  } catch {
-    console.error('Chat request failed.');
+  } catch (err) {
+    logSanitizedError('Chat request', err, 'error');
     return res.status(500).json({ error: 'Failed to process chat instructions' });
   }
 });

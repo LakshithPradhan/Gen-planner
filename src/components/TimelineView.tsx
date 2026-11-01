@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { TimelineTask } from '../types/plan';
+import React, { useId, useState } from 'react';
+import { MAX_TIMELINE_TASKS, TimelineTask } from '../types/plan';
 import { scaleTimelineTasks } from '../lib/timeline';
 import { getDaysLeft, formatDate } from '../lib/formatters';
 import { CheckCircle, Circle, AlertTriangle, Plus, Clock } from 'lucide-react';
@@ -7,7 +7,7 @@ import { CheckCircle, Circle, AlertTriangle, Plus, Clock } from 'lucide-react';
 interface TimelineViewProps {
   tasks: TimelineTask[];
   targetDate: string;
-  onToggleTask: (taskId: string, completed: boolean) => void;
+  onToggleTask: (taskId: string, completed: boolean) => boolean | void;
   onAddTask: (title: string, daysBeforeEvent: number, phase: string, isUrgent: boolean) => void;
 }
 
@@ -17,10 +17,15 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   onToggleTask,
   onAddTask,
 }) => {
+  const instanceId = useId().replace(/:/g, '');
+  const titleInputId = `${instanceId}-timeline-task-title`;
+  const daysInputId = `${instanceId}-timeline-task-days`;
   const [filter, setFilter] = useState<'all' | 'pending' | 'urgent' | 'completed'>('all');
   const [newTitle, setNewTitle] = useState('');
   const [newDays, setNewDays] = useState(14);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [taskLimitError, setTaskLimitError] = useState('');
+  const [taskEditError, setTaskEditError] = useState('');
 
   const daysLeft = getDaysLeft(targetDate);
   const scaled = scaleTimelineTasks(tasks, daysLeft, targetDate);
@@ -35,9 +40,23 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
+    if (tasks.length >= MAX_TIMELINE_TASKS) {
+      setTaskLimitError(`A plan can contain up to ${MAX_TIMELINE_TASKS} tasks. Remove a task before adding another.`);
+      return;
+    }
     onAddTask(newTitle.trim(), newDays, 'Custom Milestone', newDays <= 5);
     setNewTitle('');
     setShowAddForm(false);
+    setTaskLimitError('');
+  };
+
+  const handleToggleTask = (taskId: string, completed: boolean) => {
+    const updated = onToggleTask(taskId, completed);
+    setTaskEditError(
+      updated === false
+        ? 'This task could not be changed because its ID is duplicated or no longer exists.'
+        : ''
+    );
   };
 
   return (
@@ -101,6 +120,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
           {(['all', 'pending', 'urgent', 'completed'] as const).map((tab) => (
             <button
               key={tab}
+              aria-pressed={filter === tab}
               onClick={() => setFilter(tab)}
               className={`px-3 py-1 text-xs font-mono-code uppercase rounded-xs transition-all cursor-pointer ${
                 filter === tab
@@ -128,11 +148,17 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
           onSubmit={handleCreateTask}
           className="rounded-sm border border-[#0066ff]/40 bg-[#121218] p-4 flex flex-col sm:flex-row gap-3 items-end"
         >
+          {taskLimitError && (
+            <p role="alert" className="w-full text-xs text-amber-300">
+              {taskLimitError}
+            </p>
+          )}
           <div className="flex-1 w-full">
-            <label className="text-[10px] uppercase font-mono-code text-zinc-400 block mb-1">
+            <label htmlFor={titleInputId} className="text-[10px] uppercase font-mono-code text-zinc-400 block mb-1">
               Task Description
             </label>
             <input
+              id={titleInputId}
               type="text"
               required
               placeholder="e.g. Schedule final audio check with DJ"
@@ -143,10 +169,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
           </div>
 
           <div className="w-full sm:w-36">
-            <label className="text-[10px] uppercase font-mono-code text-zinc-400 block mb-1">
+            <label htmlFor={daysInputId} className="text-[10px] uppercase font-mono-code text-zinc-400 block mb-1">
               Days Before Event
             </label>
             <input
+              id={daysInputId}
               type="number"
               min="0"
               max="365"
@@ -175,6 +202,11 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       )}
 
       {/* Timeline Task List */}
+      {taskEditError && (
+        <p role="alert" className="text-xs text-amber-300">
+          {taskEditError}
+        </p>
+      )}
       <div className="space-y-2">
         {filteredTasks.length === 0 ? (
           <div className="py-12 text-center text-xs font-mono-code text-zinc-400 border border-white/5 rounded-sm">
@@ -184,7 +216,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
           filteredTasks.map((task) => (
             <div
               key={task.id}
-              onClick={() => onToggleTask(task.id, !task.completed)}
+              onClick={() => handleToggleTask(task.id, !task.completed)}
               className={`group flex items-center justify-between rounded-sm border p-4 transition-all duration-200 cursor-pointer ${
                 task.completed
                   ? 'border-white/5 bg-white/[0.02] opacity-60'

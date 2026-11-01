@@ -3,6 +3,7 @@ import { z } from 'zod';
 export type EventType = 'wedding' | 'birthday' | 'community';
 export type CurrencyCode = 'INR' | 'USD' | 'EUR' | 'GBP';
 export type VendorStatus = 'To contact' | 'Contacted' | 'Booked';
+export const MAX_TIMELINE_TASKS = 500;
 export const GenerationModuleSchema = z.enum(['Vendor Directory', 'City Ideas']);
 export type GenerationModule = z.infer<typeof GenerationModuleSchema>;
 
@@ -100,15 +101,6 @@ export type PlanOperation =
   | { type: 'addVendor'; vendor: { name: string; category: string; estimatedCost?: number; whatToConfirm: string } }
   | { type: 'updateVendorStatus'; vendorId: string; status: VendorStatus };
 
-export interface ChatDiff {
-  timestamp: number;
-  userPrompt: string;
-  aiExplanation: string;
-  operations: PlanOperation[];
-  beforeSnapshot: CelebrationPlan;
-  afterSnapshot: CelebrationPlan;
-}
-
 // Zod Schemas for API validation
 export const PlanRequestSchema = z.object({
   eventType: z.enum(['wedding', 'birthday', 'community']),
@@ -178,7 +170,7 @@ export const CelebrationPlanSchema = z.object({
   city: z.string().trim().min(2).max(100),
   vibeNotes: z.string().max(1000),
   budgetCategories: z.array(BudgetCategorySchema).min(1).max(100),
-  timeline: z.array(TimelineTaskSchema).max(500),
+  timeline: z.array(TimelineTaskSchema).max(MAX_TIMELINE_TASKS),
   vendors: z.array(VendorItemSchema).max(500),
   ideas: z.array(CelebrationIdeaSchema).max(500),
   summaryNote: z.string().max(2000).optional(),
@@ -203,7 +195,7 @@ export const PlanGenerationResponseSchema = z.object({
     dueDate: z.union([DateOnlySchema, z.literal('')]).optional().default(''),
     completed: z.boolean().optional().default(false),
     isUrgent: z.boolean().optional().default(false),
-  })).max(500),
+  })).max(MAX_TIMELINE_TASKS),
   vendors: z.array(z.object({
     id: NonEmptyTextSchema.max(100).optional(),
     name: NonEmptyTextSchema.max(100),

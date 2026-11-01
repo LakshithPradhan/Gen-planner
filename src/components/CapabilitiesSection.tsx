@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { ChevronRight, Sliders, PieChart, CalendarCheck2, Users, Lightbulb, Bot } from 'lucide-react';
 
-export const CapabilitiesSection: React.FC = () => {
+interface CapabilitiesSectionProps {
+  id?: string;
+}
+
+export const CapabilitiesSection: React.FC<CapabilitiesSectionProps> = ({ id }) => {
+  const instanceId = useId().replace(/:/g, '');
+  const sectionId = id ?? `${instanceId}-capabilities`;
   const [activeIdx, setActiveIdx] = useState<number | null>(0);
 
   const capabilities = [
@@ -86,7 +92,7 @@ export const CapabilitiesSection: React.FC = () => {
   ];
 
   return (
-    <section id="capabilities" className="readable-content border-b border-white/10 px-4 py-20 sm:px-6 lg:px-8 bg-[#08080a]">
+    <section id={sectionId} className="readable-content border-b border-white/10 px-4 py-20 sm:px-6 lg:px-8 bg-[#08080a]">
       <div className="mx-auto max-w-7xl">
         <div className="mb-12">
           <span className="text-xs uppercase tracking-widest text-[#0066ff] font-mono-code">
@@ -101,62 +107,76 @@ export const CapabilitiesSection: React.FC = () => {
           {capabilities.map((cap, idx) => {
             const Icon = cap.icon;
             const isOpen = activeIdx === idx;
+            const buttonId = `${instanceId}-capability-${idx}-button`;
+            const panelId = `${instanceId}-capability-${idx}-panel`;
             return (
               <div
                 key={cap.num}
-                onClick={() => setActiveIdx(isOpen ? null : idx)}
-                className={`group cursor-pointer transition-all duration-300 ${
+                className={`group transition-all duration-300 ${
                   isOpen ? 'bg-white/5' : 'hover:bg-white/[0.02]'
                 }`}
               >
-                <div className="flex items-center justify-between p-6 sm:py-7">
-                  <div className="flex items-center gap-4 sm:gap-6">
-                    <span className="text-xs font-mono-code text-zinc-400 group-hover:text-[#0066ff] transition-colors">
-                      {cap.num}
-                    </span>
-                    <div className="flex h-8 w-8 items-center justify-center rounded-sm bg-white/5 border border-white/10 text-[#0066ff] group-hover:border-[#0066ff]/50 transition-colors">
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-mono-code block">
-                        {cap.category}
+                <h3>
+                  <button
+                    id={buttonId}
+                    type="button"
+                    aria-expanded={isOpen}
+                    aria-controls={panelId}
+                    onClick={() => setActiveIdx(isOpen ? null : idx)}
+                    className="group flex w-full items-center justify-between p-6 text-left sm:py-7 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6] focus-visible:ring-inset"
+                  >
+                    <span className="flex items-center gap-4 sm:gap-6">
+                      <span className="text-xs font-mono-code text-zinc-400 group-hover:text-[#0066ff] transition-colors">
+                        {cap.num}
                       </span>
-                      <h3 className="text-lg sm:text-xl font-medium text-white group-hover:text-[#3b82f6] transition-colors">
-                        {cap.title}
-                      </h3>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <span className="hidden sm:inline-block text-[11px] font-mono-code text-zinc-400 group-hover:text-zinc-300">
-                      {isOpen ? 'COLLAPSE' : 'EXPAND SPEC'}
+                      <span className="flex h-8 w-8 items-center justify-center rounded-sm bg-white/5 border border-white/10 text-[#0066ff] group-hover:border-[#0066ff]/50 transition-colors">
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span>
+                        <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-mono-code block">
+                          {cap.category}
+                        </span>
+                        <span className="text-lg sm:text-xl font-medium text-white group-hover:text-[#3b82f6] transition-colors">
+                          {cap.title}
+                        </span>
+                      </span>
                     </span>
-                    <ChevronRight
-                      className={`h-4 w-4 text-zinc-400 transition-transform duration-300 ${
-                        isOpen ? 'rotate-90 text-[#0066ff]' : 'group-hover:translate-x-1 group-hover:text-white'
-                      }`}
-                    />
+
+                    <span className="flex items-center gap-3">
+                      <span className="hidden sm:inline-block text-[11px] font-mono-code text-zinc-400 group-hover:text-zinc-300">
+                        {isOpen ? 'COLLAPSE' : 'EXPAND SPEC'}
+                      </span>
+                      <ChevronRight
+                        className={`h-4 w-4 text-zinc-400 transition-transform duration-300 ${
+                          isOpen ? 'rotate-90 text-[#0066ff]' : 'group-hover:translate-x-1 group-hover:text-white'
+                        }`}
+                      />
+                    </span>
+                  </button>
+                </h3>
+
+                <div
+                  id={panelId}
+                  role="region"
+                  aria-labelledby={buttonId}
+                  hidden={!isOpen}
+                  className="border-t border-white/5 px-6 pb-6 pt-3 sm:pl-20 text-xs sm:text-sm text-zinc-400"
+                >
+                  <p className="max-w-3xl leading-relaxed text-zinc-300 font-light">
+                    {cap.summary}
+                  </p>
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {cap.bullets.map((b, bIdx) => (
+                      <div
+                        key={bIdx}
+                        className="flex items-start gap-2 rounded-xs border border-white/5 bg-black/40 p-2.5 text-xs text-zinc-300 font-mono-code"
+                      >
+                        <span className="text-[#0066ff] font-bold">›</span>
+                        <span>{b}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-
-                {isOpen && (
-                  <div className="border-t border-white/5 px-6 pb-6 pt-3 sm:pl-20 text-xs sm:text-sm text-zinc-400">
-                    <p className="max-w-3xl leading-relaxed text-zinc-300 font-light">
-                      {cap.summary}
-                    </p>
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      {cap.bullets.map((b, bIdx) => (
-                        <div
-                          key={bIdx}
-                          className="flex items-start gap-2 rounded-xs border border-white/5 bg-black/40 p-2.5 text-xs text-zinc-300 font-mono-code"
-                        >
-                          <span className="text-[#0066ff] font-bold">›</span>
-                          <span>{b}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })}

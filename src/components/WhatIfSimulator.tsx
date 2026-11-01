@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useId, useState, useEffect } from 'react';
 import { CelebrationPlan } from '../types/plan';
 import { calculatePlanHealth } from '../lib/healthScore';
 import { calculateBudgetSummary } from '../lib/budget';
@@ -13,6 +13,12 @@ interface WhatIfSimulatorProps {
 }
 
 export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ plan, onApplyScenario }) => {
+  const instanceId = useId().replace(/:/g, '');
+  const inputIds = {
+    guests: `${instanceId}-sim-guests`,
+    budget: `${instanceId}-sim-budget`,
+    days: `${instanceId}-sim-days`,
+  };
   const originalDays = getDaysLeft(plan.targetDate);
 
   // Local simulation state
@@ -109,7 +115,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ plan, onApplyS
           {/* Guest Count Slider */}
           <div className="rounded-xs border border-white/5 bg-black/40 p-4">
             <div className="flex items-center justify-between mb-2">
-              <label htmlFor="sim-guests" className="text-xs font-mono-code uppercase text-zinc-400">
+              <label htmlFor={inputIds.guests} className="text-xs font-mono-code uppercase text-zinc-400">
                 Guest Count
               </label>
               <span className="text-sm font-semibold font-mono-code text-white">
@@ -117,7 +123,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ plan, onApplyS
               </span>
             </div>
             <input
-              id="sim-guests"
+              id={inputIds.guests}
               type="range"
               min="10"
               max={plan.eventType === 'wedding' ? '1200' : '600'}
@@ -136,7 +142,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ plan, onApplyS
           {/* Total Budget Slider */}
           <div className="rounded-xs border border-white/5 bg-black/40 p-4">
             <div className="flex items-center justify-between mb-2">
-              <label htmlFor="sim-budget" className="text-xs font-mono-code uppercase text-zinc-400">
+              <label htmlFor={inputIds.budget} className="text-xs font-mono-code uppercase text-zinc-400">
                 Total Budget
               </label>
               <span className="text-sm font-semibold font-mono-code text-[#0066ff]">
@@ -144,7 +150,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ plan, onApplyS
               </span>
             </div>
             <input
-              id="sim-budget"
+              id={inputIds.budget}
               type="range"
               min={plan.currency === 'INR' ? '50000' : '2000'}
               max={plan.currency === 'INR' ? '5000000' : '100000'}
@@ -163,7 +169,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ plan, onApplyS
           {/* Days Left Slider */}
           <div className="rounded-xs border border-white/5 bg-black/40 p-4">
             <div className="flex items-center justify-between mb-2">
-              <label htmlFor="sim-days" className="text-xs font-mono-code uppercase text-zinc-400">
+              <label htmlFor={inputIds.days} className="text-xs font-mono-code uppercase text-zinc-400">
                 Days Until Event
               </label>
               <span className={`text-sm font-semibold font-mono-code ${
@@ -173,7 +179,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ plan, onApplyS
               </span>
             </div>
             <input
-              id="sim-days"
+              id={inputIds.days}
               type="range"
               min="2"
               max="180"

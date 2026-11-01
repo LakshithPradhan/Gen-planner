@@ -1,6 +1,35 @@
-import { CelebrationPlan, PlanOperation } from '../types/plan';
+import { CelebrationPlan, MAX_TIMELINE_TASKS, PlanOperation, TimelineTask } from '../types/plan';
 import { normalizeBudgetCategories } from './budget';
 import { addDaysToDateOnly } from './dateOnly';
+
+export function resolveUniqueTaskById(
+  tasks: TimelineTask[],
+  taskId: string
+): TimelineTask | undefined {
+  const matchingTasks = tasks.filter((task) => task.id === taskId);
+  return matchingTasks.length === 1 ? matchingTasks[0] : undefined;
+}
+
+function resolveTaskTarget(tasks: TimelineTask[], identifier: string): TimelineTask | undefined {
+  const tasksById = tasks.filter((task) => task.id === identifier);
+  if (tasksById.length > 0) return resolveUniqueTaskById(tasks, identifier);
+
+  const matchingTitles = tasks.filter((task) => task.title.toLowerCase() === identifier.toLowerCase());
+  return matchingTitles.length === 1 ? matchingTitles[0] : undefined;
+}
+
+function resolveVendorTarget(
+  vendors: CelebrationPlan['vendors'],
+  identifier: string
+): CelebrationPlan['vendors'][number] | undefined {
+  const vendorsById = vendors.filter((vendor) => vendor.id === identifier);
+  if (vendorsById.length > 0) return vendorsById.length === 1 ? vendorsById[0] : undefined;
+
+  const matchingNames = vendors.filter(
+    (vendor) => vendor.name.toLowerCase() === identifier.toLowerCase()
+  );
+  return matchingNames.length === 1 ? matchingNames[0] : undefined;
+}
 
 export interface DiffDetail {
   field: string;
@@ -13,6 +42,8 @@ export interface DiffDetail {
  * Pure function: applies a single structured edit operation to a plan immutably.
  */
 export function applyPlanOperation(plan: CelebrationPlan, op: PlanOperation): CelebrationPlan {
+  if (op.type === 'addTask' && plan.timeline.length >= MAX_TIMELINE_TASKS) return plan;
+
   const next: CelebrationPlan = {
     ...plan,
     budgetCategories: plan.budgetCategories.map((category) => ({ ...category })),
@@ -58,9 +89,7 @@ export function applyPlanOperation(plan: CelebrationPlan, op: PlanOperation): Ce
     }
 
     case 'updateTask': {
-      const task = next.timeline.find(
-        (t) => t.id === op.taskId || t.title.toLowerCase().includes(op.taskId.toLowerCase())
-      );
+      const task = resolveTaskTarget(next.timeline, op.taskId);
       if (task) {
         if (op.title !== undefined) task.title = op.title;
         if (op.phase !== undefined) task.phase = op.phase;
@@ -74,7 +103,7 @@ export function applyPlanOperation(plan: CelebrationPlan, op: PlanOperation): Ce
     }
 
     case 'completeTask': {
-      const task = next.timeline.find((t) => t.id === op.taskId || t.title.toLowerCase().includes(op.taskId.toLowerCase()));
+      const task = resolveTaskTarget(next.timeline, op.taskId);
       if (task) {
         task.completed = op.completed;
       }
@@ -82,9 +111,8 @@ export function applyPlanOperation(plan: CelebrationPlan, op: PlanOperation): Ce
     }
 
     case 'removeTask': {
-      next.timeline = next.timeline.filter(
-        (t) => t.id !== op.taskId && !t.title.toLowerCase().includes(op.taskId.toLowerCase())
-      );
+      const task = resolveTaskTarget(next.timeline, op.taskId);
+      if (task) next.timeline = next.timeline.filter((timelineTask) => timelineTask !== task);
       break;
     }
 
@@ -116,9 +144,7 @@ export function applyPlanOperation(plan: CelebrationPlan, op: PlanOperation): Ce
     }
 
     case 'updateVendorStatus': {
-      const vendor = next.vendors.find(
-        (v) => v.id === op.vendorId || v.name.toLowerCase().includes(op.vendorId.toLowerCase())
-      );
+      const vendor = resolveVendorTarget(next.vendors, op.vendorId);
       if (vendor) {
         vendor.status = op.status;
       }
@@ -201,27 +227,27 @@ export function generatePlanDiff(before: CelebrationPlan, after: CelebrationPlan
   });
 
   // Timeline additions / completions / deletions
-  if (after.timeline.length > before.timeline.length) {
-    const added = after.timeline.filter((t) => !before.timeline.some((bt) => bt.id === t.id));
-    added.forEach((t) => {
-      diffs.push({
-        field: 'New Task Added',
-        before: '—',
-        after: t.title,
-        description: `Added to timeline (${t.daysBeforeEvent} days before)`,
-      });
+  const beforeTaskIds = new Set(before.timeline.map((task) => task.id));
+  const afterTaskIds = new Set(after.timeline.map((task) => task.id));
+  const addedTasks = after.timeline.filter((task) => !beforeTaskIds.has(task.id));
+  const removedTasks = before.timeline.filter((task) => !afterTaskIds.has(task.id));
+
+  addedTasks.forEach((task) => {
+    diffs.push({
+      field: 'New Task Added',
+      before: '—',
+      after: task.title,
+      description: `Added to timeline (${task.daysBeforeEvent} days before)`,
     });
-  } else if (after.timeline.length < before.timeline.length) {
-    const removed = before.timeline.filter((bt) => !after.timeline.some((t) => t.id === bt.id));
-    removed.forEach((t) => {
-      diffs.push({
-        field: 'Task Removed',
-        before: t.title,
-        after: '—',
-        description: `Deleted task from timeline`,
-      });
+  });
+  removedTasks.forEach((task) => {
+    diffs.push({
+      field: 'Task Removed',
+      before: task.title,
+      after: '—',
+      description: 'Deleted task from timeline',
     });
-  }
+  });
 
   after.timeline.forEach((afterTask) => {
     const beforeTask = before.timeline.find((t) => t.id === afterTask.id);

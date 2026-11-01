@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { BudgetCategory, CurrencyCode } from '../types/plan';
 import { calculateBudgetSummary } from '../lib/budget';
 import { formatCurrency } from '../lib/formatters';
@@ -24,6 +24,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
   onUpdateCategorySpent,
   onNormalize,
 }) => {
+  const instanceId = useId().replace(/:/g, '');
   const summary = calculateBudgetSummary(totalBudget, guestCount, categories);
   const currentSum = Math.round(categories.reduce((acc, c) => acc + (Number(c.percentage) || 0), 0) * 10) / 10;
   const isBalanced = Math.abs(currentSum - 100) < 0.1;
@@ -166,6 +167,8 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
           <div className="space-y-4">
             {summary.categories.map((cat) => {
               const isOverCat = cat.spent > cat.plannedAmount;
+              const percentageInputId = `${instanceId}-pct-${cat.id}`;
+              const spentInputId = `${instanceId}-spent-${cat.id}`;
               return (
                 <div
                   key={cat.id}
@@ -195,12 +198,12 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                     {/* Inputs: % share and Spent amount */}
                     <div className="flex items-center gap-4 shrink-0">
                       <div className="flex items-center gap-1.5">
-                        <label htmlFor={`pct-${cat.id}`} className="text-[10px] uppercase font-mono-code text-zinc-400">
+                        <label htmlFor={percentageInputId} className="text-[10px] uppercase font-mono-code text-zinc-400">
                           Share
                         </label>
                         <div className="relative">
                           <input
-                            id={`pct-${cat.id}`}
+                            id={percentageInputId}
                             type="number"
                             min="0"
                             max="100"
@@ -215,11 +218,11 @@ export const BudgetView: React.FC<BudgetViewProps> = ({
                       </div>
 
                       <div className="flex items-center gap-1.5">
-                        <label htmlFor={`spent-${cat.id}`} className="text-[10px] uppercase font-mono-code text-zinc-400">
+                        <label htmlFor={spentInputId} className="text-[10px] uppercase font-mono-code text-zinc-400">
                           Spent
                         </label>
                         <input
-                          id={`spent-${cat.id}`}
+                          id={spentInputId}
                           type="number"
                           min="0"
                           step="500"

@@ -1,6 +1,7 @@
-import { CelebrationPlan, VendorItem, VendorStatus } from '../types/plan';
+import { CelebrationPlan, MAX_TIMELINE_TASKS, VendorItem, VendorStatus } from '../types/plan';
 import { normalizeBudgetCategories } from '../lib/budget';
 import { addDaysToDateOnly } from '../lib/dateOnly';
+import { resolveUniqueTaskById } from '../lib/operations';
 
 type PlanUpdateHandler = (plan: CelebrationPlan) => void;
 type NewVendorDetails = Pick<VendorItem, 'name' | 'category' | 'estimatedCost' | 'whatToConfirm'>;
@@ -30,10 +31,14 @@ export function usePlanEditor(plan: CelebrationPlan, onUpdatePlan: PlanUpdateHan
   };
 
   const handleToggleTask = (taskId: string, completed: boolean) => {
+    const target = resolveUniqueTaskById(plan.timeline, taskId);
+    if (!target) return false;
+
     const timeline = plan.timeline.map((task) =>
-      task.id === taskId ? { ...task, completed } : task
+      task === target ? { ...task, completed } : task
     );
     onUpdatePlan({ ...plan, timeline });
+    return true;
   };
 
   const handleAddTask = (
@@ -42,6 +47,8 @@ export function usePlanEditor(plan: CelebrationPlan, onUpdatePlan: PlanUpdateHan
     phase: string,
     isUrgent: boolean
   ) => {
+    if (plan.timeline.length >= MAX_TIMELINE_TASKS) return;
+
     const task = {
       id: `task_${Date.now()}`,
       title,

@@ -4,6 +4,7 @@ import {
   DateOnlySchema,
   PlanGenerationResponseSchema,
   PlanRequestSchema,
+  MAX_TIMELINE_TASKS,
 } from '../types/plan';
 import { addDaysToDateOnly, daysBetweenDateOnly, formatDateOnly } from '../lib/dateOnly';
 import {
@@ -54,6 +55,23 @@ describe('plan and model schemas', () => {
     };
     expect(CelebrationPlanSchema.safeParse(incompletePlan).success).toBe(false);
     expect(CelebrationPlanSchema.safeParse({ ...plan, timeline: undefined }).success).toBe(false);
+  });
+
+  it('accepts 500 timeline tasks and rejects 501', () => {
+    const plan = getBuiltinTemplate('birthday');
+    const atLimit = {
+      ...plan,
+      timeline: Array.from({ length: MAX_TIMELINE_TASKS }, (_, index) => ({
+        ...plan.timeline[0],
+        id: `schema-task-${index}`,
+      })),
+    };
+
+    expect(CelebrationPlanSchema.safeParse(atLimit).success).toBe(true);
+    expect(CelebrationPlanSchema.safeParse({
+      ...atLimit,
+      timeline: [...atLimit.timeline, { ...atLimit.timeline[0], id: 'schema-task-501' }],
+    }).success).toBe(false);
   });
 
   it('rejects invalid numbers and impossible date-only values', () => {
@@ -134,6 +152,26 @@ describe('saved and shared plan validation', () => {
     expect(localStorage.getItem('evora_invalid_plan_recovery_v1')).toBe('{broken-json');
   });
 
+  it('preserves a saved plan that exceeds the task limit instead of loading it', () => {
+    const localStorage = new TestStorage();
+    const plan = getBuiltinTemplate('birthday');
+    const overLimitPlan = {
+      ...plan,
+      timeline: Array.from({ length: MAX_TIMELINE_TASKS + 1 }, (_, index) => ({
+        ...plan.timeline[0],
+        id: `saved-task-${index}`,
+      })),
+    };
+    const serialized = JSON.stringify(overLimitPlan);
+    localStorage.setItem('evora_active_plan_v2', serialized);
+    vi.stubGlobal('localStorage', localStorage);
+
+    expect(loadPlanFromStorage()).toBeNull();
+    expect(localStorage.getItem('evora_active_plan_v2')).toBe(serialized);
+    expect(localStorage.getItem('evora_invalid_plan_recovery_v1')).toBe(serialized);
+    expect(getPlanRestoreWarning()).toContain('original data was preserved');
+  });
+
   it('rejects incomplete compact shared-plan payloads', () => {
     const encoded = btoa(unescape(encodeURIComponent(JSON.stringify({ n: 'Missing required fields' }))));
     vi.stubGlobal('window', { location: { hash: `#share=${encoded}` } });
@@ -174,6 +212,33 @@ describe('saved and shared plan validation', () => {
     expect(sharedPlan?.eventType).toBe('birthday');
     expect(sharedPlan?.budgetCategories.length).toBeGreaterThan(0);
     expect(sharedPlan?.timeline[0].phase).toBe('Milestone');
+  });
+
+  it('rejects shared plans with more than 500 timeline tasks', () => {
+    const plan = getBuiltinTemplate('birthday');
+    const payload = {
+      n: plan.eventName,
+      t: plan.eventType,
+      d: plan.targetDate,
+      g: plan.guestCount,
+      c: plan.currency,
+      b: plan.totalBudget,
+      ci: plan.city,
+      v: plan.vibeNotes,
+      bc: plan.budgetCategories.map((category) => ({
+        id: category.id, n: category.name, p: category.percentage, s: category.spent,
+      })),
+      tl: Array.from({ length: MAX_TIMELINE_TASKS + 1 }, (_, index) => ({
+        id: `shared-task-${index}`, t: `Task ${index}`, d: 1, c: false,
+      })),
+      vd: [],
+      id: [],
+    };
+    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+    vi.stubGlobal('window', { location: { hash: `#share=${encoded}` } });
+
+    expect(parseSharedPlanFromUrl()).toBeNull();
+    expect(getPlanRestoreWarning()).toContain('incomplete or invalid');
   });
 
   it('reports share-link encoding failures instead of returning the current page URL', () => {

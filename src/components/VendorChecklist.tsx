@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { VendorItem, VendorStatus, CurrencyCode } from '../types/plan';
 import { formatCurrency } from '../lib/formatters';
 import { CheckCircle2, Clock, PhoneCall, Plus, Trash2, Search, HelpCircle } from 'lucide-react';
@@ -18,6 +18,13 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({
   onAddVendor,
   onDeleteVendor,
 }) => {
+  const instanceId = useId().replace(/:/g, '');
+  const vendorInputIds = {
+    name: `${instanceId}-vendor-name`,
+    category: `${instanceId}-vendor-category`,
+    cost: `${instanceId}-vendor-cost`,
+    tip: `${instanceId}-vendor-tip`,
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | VendorStatus>('all');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -104,6 +111,7 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({
           <input
             type="text"
             placeholder="Search vendor or category..."
+            aria-label="Search vendors"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full rounded-xs border border-white/10 bg-white/5 pl-9 pr-3 py-1.5 text-xs text-white placeholder-zinc-400 focus:border-[#0066ff] focus:outline-none font-mono-code"
@@ -115,6 +123,7 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({
             {(['all', 'To contact', 'Contacted', 'Booked'] as const).map((st) => (
               <button
                 key={st}
+                aria-pressed={statusFilter === st}
                 onClick={() => setStatusFilter(st)}
                 className={`px-2.5 py-1 uppercase rounded-xs transition-colors cursor-pointer ${
                   statusFilter === st ? 'bg-[#0066ff] text-white' : 'text-zinc-400 hover:text-white'
@@ -143,10 +152,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({
         >
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="text-[10px] uppercase font-mono-code text-zinc-400 block mb-1">
+              <label htmlFor={vendorInputIds.name} className="text-[10px] uppercase font-mono-code text-zinc-400 block mb-1">
                 Vendor Name
               </label>
               <input
+                id={vendorInputIds.name}
                 type="text"
                 required
                 placeholder="e.g. Royal Rajputana Mandap"
@@ -157,10 +167,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({
             </div>
 
             <div>
-              <label className="text-[10px] uppercase font-mono-code text-zinc-400 block mb-1">
+              <label htmlFor={vendorInputIds.category} className="text-[10px] uppercase font-mono-code text-zinc-400 block mb-1">
                 Category
               </label>
               <input
+                id={vendorInputIds.category}
                 type="text"
                 required
                 placeholder="e.g. Floral & Mandap Decor"
@@ -171,10 +182,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({
             </div>
 
             <div>
-              <label className="text-[10px] uppercase font-mono-code text-zinc-400 block mb-1">
+              <label htmlFor={vendorInputIds.cost} className="text-[10px] uppercase font-mono-code text-zinc-400 block mb-1">
                 Estimated Cost ({currency})
               </label>
               <input
+                id={vendorInputIds.cost}
                 type="number"
                 min="0"
                 value={cost}
@@ -185,10 +197,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({
           </div>
 
           <div>
-            <label className="text-[10px] uppercase font-mono-code text-zinc-400 block mb-1">
+            <label htmlFor={vendorInputIds.tip} className="text-[10px] uppercase font-mono-code text-zinc-400 block mb-1">
               What To Confirm Tip
             </label>
             <input
+              id={vendorInputIds.tip}
               type="text"
               placeholder="e.g. Confirm generator backup, overtime fee after midnight, and setup crew count."
               value={tip}

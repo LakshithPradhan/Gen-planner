@@ -81,10 +81,14 @@ export default function App() {
     savePlanToStorage(plan);
   }, [plan]);
 
-  // Handle plan update from direct UI editing (sliders, checklist, etc.)
-  const handleUpdatePlan = (updatedPlan: CelebrationPlan) => {
+  const commitPlan = (updatedPlan: CelebrationPlan) => {
     setUndoStack((prev) => [...prev.slice(-15), plan]);
     setPlan(updatedPlan);
+  };
+
+  // Handle plan update from direct UI editing (sliders, checklist, etc.)
+  const handleUpdatePlan = (updatedPlan: CelebrationPlan) => {
+    commitPlan(updatedPlan);
   };
 
   // Handle plan update from AI Chat with visual before/after diff
@@ -93,8 +97,7 @@ export default function App() {
     diffs: DiffDetail[],
     explanation: string
   ) => {
-    setUndoStack((prev) => [...prev.slice(-15), plan]);
-    setPlan(updatedPlan);
+    commitPlan(updatedPlan);
     setCurrentDiffs(diffs);
     setAiExplanation(explanation);
     setIsDiffOpen(true);
@@ -112,8 +115,7 @@ export default function App() {
   // Quick Archetype Loader
   const handleSelectArchetype = (type: EventType) => {
     const newTemplate = getBuiltinTemplate(type);
-    setUndoStack((prev) => [...prev.slice(-15), plan]);
-    setPlan(newTemplate);
+    commitPlan(newTemplate);
     showToast(`Loaded ${type === 'wedding' ? 'Royal Wedding' : type === 'birthday' ? 'Milestone Birthday' : 'Community Fest'} Archetype`);
     confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
 
@@ -135,8 +137,7 @@ export default function App() {
     setIsLoadingPlan(true);
     try {
       const newPlan = await requestGeneratedPlan(request.data);
-      setUndoStack((prev) => [...prev.slice(-15), plan]);
-      setPlan(newPlan);
+      commitPlan(newPlan);
       setIsInitiateOpen(false);
       showToast(`Celebration plan created for "${newPlan.eventName}"!`);
       confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
@@ -160,8 +161,7 @@ export default function App() {
         fallbackPlan,
         request.data.selectedModules ?? GENERATION_MODULES
       );
-      setUndoStack((prev) => [...prev.slice(-15), plan]);
-      setPlan(generatedPlan);
+      commitPlan(generatedPlan);
       setIsInitiateOpen(false);
       showToast(`Formulated plan for "${generatedPlan.eventName}" (Offline Generator)`);
 
@@ -210,7 +210,7 @@ export default function App() {
 
         <EventTypesSection onSelectType={handleSelectArchetype} />
 
-        <CapabilitiesSection />
+        <CapabilitiesSection id="capabilities" />
 
         <PlanDashboard
           plan={plan}

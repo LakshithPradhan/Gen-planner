@@ -3,6 +3,7 @@ import {
   CelebrationPlan,
   CelebrationPlanSchema,
   DateOnlySchema,
+  MAX_TIMELINE_TASKS,
 } from '../types/plan';
 import { formatCurrency, formatDate } from './formatters';
 
@@ -36,7 +37,7 @@ const SharedPayloadSchema = z.object({
     d: z.number().int().min(0).max(3650),
     c: z.boolean(),
     u: z.boolean().optional(),
-  }).strict()).max(500),
+  }).strict()).max(MAX_TIMELINE_TASKS),
   vd: z.array(z.object({
     id: z.string().trim().min(1).max(100),
     n: z.string().trim().min(1).max(100),

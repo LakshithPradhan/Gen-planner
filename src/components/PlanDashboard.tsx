@@ -157,6 +157,7 @@ export const PlanDashboard: React.FC<PlanDashboardProps> = ({
             return (
               <button
                 key={tab.id}
+                aria-pressed={isActive}
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 whitespace-nowrap px-4 py-3 text-xs font-mono-code uppercase border-b-2 transition-all cursor-pointer ${
                   isActive

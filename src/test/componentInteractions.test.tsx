@@ -3,15 +3,18 @@ import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CommandCenterModal } from '../components/CommandCenterModal';
+import App from '../App';
 import { IdeasView } from '../components/IdeasView';
 import { PlanChatModal } from '../components/PlanChatModal';
 import { TimelineView } from '../components/TimelineView';
 import { VendorChecklist } from '../components/VendorChecklist';
+import { usePlanEditor } from '../hooks/usePlanEditor';
 import { copyTextToClipboard } from '../lib/clipboard';
 import { applyOperations, DiffDetail } from '../lib/operations';
 import { getBuiltinTemplate } from '../lib/templates';
-import { CelebrationPlan } from '../types/plan';
+import { CelebrationPlan, MAX_TIMELINE_TASKS } from '../types/plan';
 import { DiffModal } from '../components/DiffModal';
+import { CapabilitiesSection } from '../components/CapabilitiesSection';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -36,6 +39,17 @@ function pressKey(key: string, shiftKey = false): KeyboardEvent {
   const event = new KeyboardEvent('keydown', { key, shiftKey, bubbles: true, cancelable: true });
   document.dispatchEvent(event);
   return event;
+}
+
+function activateButtonWithKeyboard(button: HTMLButtonElement, key: 'Enter' | ' '): void {
+  button.focus();
+  const keydown = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+  button.dispatchEvent(keydown);
+  if (key === ' ') {
+    button.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true, cancelable: true }));
+  }
+  // jsdom omits the browser's native button keyboard activation default action.
+  if (!keydown.defaultPrevented) click(button);
 }
 
 function setInputValue(input: HTMLInputElement, value: string): void {
@@ -67,6 +81,43 @@ afterEach(async () => {
 });
 
 describe('event creation and editing interactions', () => {
+  it('exposes capability disclosures as keyboard-operable buttons with unique panel controls', async () => {
+    const container = await render(
+      <>
+        <CapabilitiesSection />
+        <CapabilitiesSection />
+      </>
+    );
+    const buttons = [...container.querySelectorAll<HTMLButtonElement>(
+      'button[aria-controls*="-capability-"]'
+    )];
+    expect(buttons.length).toBeGreaterThan(0);
+
+    const ids = [...container.querySelectorAll<HTMLElement>('[id]')].map((element) => element.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const button of buttons) {
+      const panel = document.getElementById(button.getAttribute('aria-controls')!);
+      expect(panel).not.toBeNull();
+      expect(panel?.getAttribute('aria-labelledby')).toBe(button.id);
+    }
+
+    const firstSectionButtons = buttons.slice(0, 6);
+    const firstButton = firstSectionButtons[0];
+    const firstPanel = document.getElementById(firstButton.getAttribute('aria-controls')!);
+    expect(firstButton.getAttribute('aria-expanded')).toBe('true');
+    expect(firstPanel?.hidden).toBe(false);
+    click(firstButton);
+    expect(firstButton.getAttribute('aria-expanded')).toBe('false');
+    expect(firstPanel?.hidden).toBe(true);
+
+    activateButtonWithKeyboard(firstButton, 'Enter');
+    expect(firstButton.getAttribute('aria-expanded')).toBe('true');
+    expect(firstPanel?.hidden).toBe(false);
+    activateButtonWithKeyboard(firstButton, ' ');
+    expect(firstButton.getAttribute('aria-expanded')).toBe('false');
+    expect(firstPanel?.hidden).toBe(true);
+  });
+
   it('keeps the default Command Center brief valid for form submission', async () => {
     const container = await render(
       <CommandCenterModal isOpen onClose={vi.fn()} onSubmit={vi.fn()} isLoading={false} />
@@ -98,7 +149,7 @@ describe('event creation and editing interactions', () => {
     click(trigger);
 
     const dialog = container.querySelector('dialog')!;
-    expect(document.activeElement).toBe(dialog.querySelector('#command-event-name'));
+    expect(document.activeElement).toBe(dialog.querySelector('input[type="text"]'));
 
     const focusable = [...dialog.querySelectorAll<HTMLElement>(
       'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -161,7 +212,7 @@ describe('event creation and editing interactions', () => {
       pressKey('Escape');
     });
     expect(container.querySelectorAll('dialog')).toHaveLength(1);
-    expect(document.activeElement).toBe(container.querySelector('#chat-instruction'));
+    expect(document.activeElement).toBe(container.querySelector('[aria-label="Plan instruction"]'));
 
     await act(async () => {
       pressKey('Escape');
@@ -195,6 +246,34 @@ describe('event creation and editing interactions', () => {
     }));
   });
 
+  it('associates form labels and controls uniquely across repeated component instances', async () => {
+    const plan = getBuiltinTemplate('birthday');
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const container = await render(
+      <>
+        <CommandCenterModal isOpen onClose={vi.fn()} onSubmit={onSubmit} isLoading={false} />
+        <CommandCenterModal isOpen onClose={vi.fn()} onSubmit={onSubmit} isLoading={false} />
+        <TimelineView tasks={plan.timeline} targetDate={plan.targetDate} onToggleTask={vi.fn()} onAddTask={vi.fn()} />
+        <TimelineView tasks={plan.timeline} targetDate={plan.targetDate} onToggleTask={vi.fn()} onAddTask={vi.fn()} />
+        <VendorChecklist vendors={plan.vendors} currency={plan.currency} onUpdateStatus={vi.fn()} onAddVendor={vi.fn()} onDeleteVendor={vi.fn()} />
+        <VendorChecklist vendors={plan.vendors} currency={plan.currency} onUpdateStatus={vi.fn()} onAddVendor={vi.fn()} onDeleteVendor={vi.fn()} />
+      </>
+    );
+
+    [...container.querySelectorAll('button')]
+      .filter((button) => button.textContent?.includes('Add Custom Task') || button.textContent?.includes('Add Vendor'))
+      .forEach(click);
+
+    const labels = [...container.querySelectorAll('label')];
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels.every((label) => label.control !== null)).toBe(true);
+
+    const ids = [...container.querySelectorAll<HTMLElement>('[id]')].map((element) => element.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(container.querySelectorAll('[aria-label="Search vendors"]')).toHaveLength(2);
+    expect([...container.querySelectorAll('button[aria-pressed]')].length).toBeGreaterThan(0);
+  });
+
   it('adds a timeline task through the task form', async () => {
     const onAddTask = vi.fn();
     const plan = getBuiltinTemplate('birthday');
@@ -213,6 +292,156 @@ describe('event creation and editing interactions', () => {
     await submit(container.querySelector('form')!);
 
     expect(onAddTask).toHaveBeenCalledWith('Confirm accessibility setup', 14, 'Custom Milestone', false);
+  });
+
+  it('toggles a unique task ID through the direct timeline editor', async () => {
+    const plan = getBuiltinTemplate('birthday');
+    const target = plan.timeline.find((task) => !task.completed)!;
+    const originalTimeline = plan.timeline.map((task) => ({ ...task }));
+    const committedPlans: CelebrationPlan[] = [];
+
+    function Harness() {
+      const [currentPlan, setCurrentPlan] = React.useState(plan);
+      const { handleToggleTask } = usePlanEditor(currentPlan, (updatedPlan) => {
+        committedPlans.push(updatedPlan);
+        setCurrentPlan(updatedPlan);
+      });
+      return (
+        <TimelineView
+          tasks={currentPlan.timeline}
+          targetDate={currentPlan.targetDate}
+          onToggleTask={handleToggleTask}
+          onAddTask={vi.fn()}
+        />
+      );
+    }
+
+    const container = await render(<Harness />);
+    const targetRow = [...container.querySelectorAll<HTMLElement>('.group.flex.items-center.justify-between')]
+      .find((row) => row.textContent?.includes(target.title));
+    const targetToggle = targetRow?.querySelector<HTMLButtonElement>(
+      '[aria-label="Mark task as complete"]'
+    );
+    expect(targetToggle).not.toBeNull();
+    click(targetToggle!);
+
+    expect(committedPlans).toHaveLength(1);
+    expect(committedPlans[0].timeline.find((task) => task.id === target.id)?.completed).toBe(true);
+    expect(committedPlans[0].timeline.filter((task) => task.id !== target.id))
+      .toEqual(plan.timeline.filter((task) => task.id !== target.id));
+    expect(plan.timeline).toEqual(originalTimeline);
+  });
+
+  it('rejects direct timeline toggles for duplicate task IDs without changing the plan', async () => {
+    const template = getBuiltinTemplate('birthday');
+    const plan: CelebrationPlan = {
+      ...template,
+      timeline: [
+        { ...template.timeline[0], id: 'duplicate-task-id', title: 'Book venue', completed: false },
+        { ...template.timeline[1], id: 'duplicate-task-id', title: 'Confirm catering', completed: false },
+        { ...template.timeline[2], id: 'unrelated-task-id', title: 'Confirm music', completed: false },
+      ],
+    };
+    const originalTimeline = plan.timeline.map((task) => ({ ...task }));
+    const committedPlans: CelebrationPlan[] = [];
+
+    function Harness() {
+      const [currentPlan, setCurrentPlan] = React.useState(plan);
+      const { handleToggleTask } = usePlanEditor(currentPlan, (updatedPlan) => {
+        committedPlans.push(updatedPlan);
+        setCurrentPlan(updatedPlan);
+      });
+      return (
+        <>
+          <button type="button" onClick={() => handleToggleTask('missing-task-id', true)}>
+            Toggle missing task
+          </button>
+          <TimelineView
+            tasks={currentPlan.timeline}
+            targetDate={currentPlan.targetDate}
+            onToggleTask={handleToggleTask}
+            onAddTask={vi.fn()}
+          />
+        </>
+      );
+    }
+
+    const container = await render(<Harness />);
+    click(container.querySelector('button')!);
+    expect(committedPlans).toHaveLength(0);
+
+    const toggles = [...container.querySelectorAll<HTMLButtonElement>(
+      'button[aria-label="Mark task as complete"]'
+    )];
+    expect(toggles).toHaveLength(3);
+
+    click(toggles[0]);
+
+    expect(committedPlans).toHaveLength(0);
+    expect(plan.timeline).toEqual(originalTimeline);
+    expect([...container.querySelectorAll<HTMLButtonElement>(
+      'button[aria-label="Mark task as complete"]'
+    )]).toHaveLength(3);
+    expect([...container.querySelectorAll<HTMLButtonElement>(
+      'button[aria-label="Mark task as incomplete"]'
+    )]).toHaveLength(0);
+    expect(container.querySelector('[role="alert"]')?.textContent)
+      .toContain('ID is duplicated or no longer exists');
+  });
+
+  it('allows the 500th task and explains why a 501st task is rejected', async () => {
+    const template = getBuiltinTemplate('birthday');
+    const plan: CelebrationPlan = {
+      ...template,
+      timeline: Array.from({ length: MAX_TIMELINE_TASKS - 1 }, (_, index) => ({
+        ...template.timeline[0],
+        id: `limit-task-${index}`,
+      })),
+    };
+    const committedPlans: CelebrationPlan[] = [];
+
+    function Harness() {
+      const [currentPlan, setCurrentPlan] = React.useState(plan);
+      const updatePlan = (updatedPlan: CelebrationPlan) => {
+        committedPlans.push(updatedPlan);
+        setCurrentPlan(updatedPlan);
+      };
+      const { handleAddTask, handleToggleTask } = usePlanEditor(currentPlan, updatePlan);
+      return (
+        <>
+          <output>{currentPlan.timeline.length}</output>
+          <TimelineView
+            tasks={currentPlan.timeline}
+            targetDate={currentPlan.targetDate}
+            onToggleTask={handleToggleTask}
+            onAddTask={handleAddTask}
+          />
+        </>
+      );
+    }
+
+    const container = await render(<Harness />);
+    const openForm = () => click([...container.querySelectorAll('button')]
+      .find((button) => button.textContent?.includes('Add Custom Task'))!);
+
+    openForm();
+    setInputValue(container.querySelector('input[type="text"]')!, 'The 500th task');
+    await submit(container.querySelector('form')!);
+
+    expect(container.querySelector('output')?.textContent).toBe(String(MAX_TIMELINE_TASKS));
+    expect(committedPlans).toHaveLength(1);
+    expect(committedPlans[0].timeline[0].title).toBe('The 500th task');
+
+    openForm();
+    setInputValue(container.querySelector('input[type="text"]')!, 'The 501st task');
+    await submit(container.querySelector('form')!);
+
+    expect(container.querySelector('output')?.textContent).toBe(String(MAX_TIMELINE_TASKS));
+    expect(committedPlans).toHaveLength(1);
+    expect(container.querySelector('[role="alert"]')?.textContent)
+      .toContain('up to 500 tasks');
+    expect(container.querySelector('[role="alert"]')?.textContent)
+      .toContain('Remove a task before adding another');
   });
 
   it('updates vendor status and adds a vendor from the checklist controls', async () => {
@@ -317,6 +546,180 @@ describe('offline chat and clipboard behavior', () => {
     expect(updatedPlan.eventName).toBe('Offline Updated Celebration');
     expect(plan.eventName).toBe('Original Celebration');
     expect(container.textContent).toContain('Local mode:');
+  });
+
+  it('commits task replacement operations returned by the chat API', async () => {
+    const plan = getBuiltinTemplate('birthday', { date: '2027-06-15' });
+    const removedTask = plan.timeline[0];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        reply: 'Replaced the task.',
+        operations: [
+          { type: 'removeTask', taskId: removedTask.id },
+          {
+            type: 'addTask',
+            task: { title: 'Confirm accessibility setup', daysBeforeEvent: 7 },
+          },
+        ],
+      }),
+    }));
+    const onPlanUpdated = vi.fn<(updatedPlan: CelebrationPlan, diffs: DiffDetail[], aiExplanation: string) => void>();
+    const container = await render(
+      <PlanChatModal
+        isOpen
+        onClose={vi.fn()}
+        plan={plan}
+        onPlanUpdated={onPlanUpdated}
+        canUndo={false}
+        onUndo={vi.fn()}
+      />
+    );
+
+    setInputValue(container.querySelector<HTMLInputElement>('[aria-label="Plan instruction"]')!, 'Replace a timeline task');
+    click(container.querySelector('button[aria-label="Send instruction"]')!);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(onPlanUpdated).toHaveBeenCalledTimes(1);
+    const [updatedPlan, diffs] = onPlanUpdated.mock.calls[0];
+    expect(updatedPlan.timeline).toHaveLength(plan.timeline.length);
+    expect(updatedPlan.timeline.some((task) => task.id === removedTask.id)).toBe(false);
+    expect(updatedPlan.timeline.some((task) => task.title === 'Confirm accessibility setup')).toBe(true);
+    expect(diffs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'New Task Added', after: 'Confirm accessibility setup' }),
+      expect.objectContaining({ field: 'Task Removed', before: removedTask.title }),
+    ]));
+    expect(container.textContent).toContain('Replaced the task.');
+  });
+
+  it('uses the local fallback for a successful chat response with no operations', async () => {
+    const plan = getBuiltinTemplate('birthday', { eventName: 'Original Celebration' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ reply: 'No structured change.', operations: [] }),
+    }));
+    const onPlanUpdated = vi.fn<(updatedPlan: CelebrationPlan, diffs: DiffDetail[], aiExplanation: string) => void>();
+    const container = await render(
+      <PlanChatModal
+        isOpen
+        onClose={vi.fn()}
+        plan={plan}
+        onPlanUpdated={onPlanUpdated}
+        canUndo={false}
+        onUndo={vi.fn()}
+      />
+    );
+
+    setInputValue(
+      container.querySelector<HTMLInputElement>('[aria-label="Plan instruction"]')!,
+      'Rename event to Locally Updated Celebration'
+    );
+    click(container.querySelector('button[aria-label="Send instruction"]')!);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(onPlanUpdated).toHaveBeenCalledTimes(1);
+    expect(onPlanUpdated.mock.calls[0][0].eventName).toBe('Locally Updated Celebration');
+    expect(onPlanUpdated.mock.calls[0][2]).toBe('Renamed the event to "Locally Updated Celebration".');
+    expect(plan.eventName).toBe('Original Celebration');
+    expect(onPlanUpdated.mock.calls[0][0].timeline).toEqual(plan.timeline);
+    expect(container.textContent).toContain('Renamed the event to "Locally Updated Celebration".');
+    expect(container.textContent).not.toContain('Local mode:');
+    const assistantMessages = [...container.querySelectorAll('.whitespace-pre-line')]
+      .filter((message) => message.textContent?.includes('Renamed the event to "Locally Updated Celebration".'));
+    expect(assistantMessages).toHaveLength(1);
+    expect(container.textContent.match(/AI PLANNER/g)).toHaveLength(2);
+    expect(container.textContent).not.toContain('Analyzing constraints and executing plan operations');
+    expect(container.querySelector<HTMLInputElement>('[aria-label="Plan instruction"]')?.disabled).toBe(false);
+    expect(container.querySelector('[aria-live="polite"]')?.textContent)
+      .toBe('Plan updated: 1 changes applied. Renamed the event to "Locally Updated Celebration".');
+  });
+
+  it('commits and undoes edits through the real App undo history, retaining its 16-entry limit', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      key: vi.fn(() => null),
+      get length() { return 0; },
+    });
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn() })));
+    const container = await render(<App />);
+    const dashboard = container.querySelector<HTMLElement>('#dashboard')!;
+    const timelineTab = [...dashboard.querySelectorAll('button')]
+      .find((button) => button.textContent?.includes('Temporal Timeline'))!;
+    click(timelineTab);
+
+    const firstTask = dashboard.querySelector<HTMLElement>('[aria-label="Mark task as incomplete"]')!;
+    click(firstTask);
+    expect(dashboard.querySelector('[aria-label="Mark task as complete"]')).not.toBeNull();
+    expect(dashboard.querySelector('button[title="Undo last modification"]')).not.toBeNull();
+
+    click(dashboard.querySelector('button[title="Undo last modification"]')!);
+    expect(dashboard.querySelector('[aria-label="Mark task as incomplete"]')).not.toBeNull();
+    expect(dashboard.querySelector('button[title="Undo last modification"]')).toBeNull();
+
+    for (let index = 0; index < 17; index += 1) {
+      const taskToggle = dashboard.querySelector<HTMLElement>(
+        index % 2 === 0
+          ? '[aria-label="Mark task as incomplete"]'
+          : '[aria-label="Mark task as complete"]'
+      );
+      if (!taskToggle) throw new Error('Expected the task toggle to remain available');
+      click(taskToggle);
+    }
+
+    for (let index = 0; index < 16; index += 1) {
+      const undoButton = dashboard.querySelector<HTMLButtonElement>('button[title="Undo last modification"]');
+      if (!undoButton) throw new Error(`Undo history ended after ${index} entries`);
+      click(undoButton);
+    }
+
+    expect(dashboard.querySelector('[aria-label="Mark task as complete"]')).not.toBeNull();
+    expect(dashboard.querySelector('button[title="Undo last modification"]')).toBeNull();
+  });
+
+  it('explains when a chat task addition is rejected at the task limit', async () => {
+    const template = getBuiltinTemplate('birthday');
+    const plan: CelebrationPlan = {
+      ...template,
+      timeline: Array.from({ length: MAX_TIMELINE_TASKS }, (_, index) => ({
+        ...template.timeline[0],
+        id: `chat-limit-task-${index}`,
+      })),
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        reply: 'Added the task.',
+        operations: [{ type: 'addTask', task: { title: 'Blocked chat task' } }],
+      }),
+    }));
+    const onPlanUpdated = vi.fn<(updatedPlan: CelebrationPlan, diffs: DiffDetail[], aiExplanation: string) => void>();
+    const container = await render(
+      <PlanChatModal
+        isOpen
+        onClose={vi.fn()}
+        plan={plan}
+        onPlanUpdated={onPlanUpdated}
+        canUndo={false}
+        onUndo={vi.fn()}
+      />
+    );
+
+    setInputValue(container.querySelector<HTMLInputElement>('[aria-label="Plan instruction"]')!, 'Add another task');
+    click(container.querySelector('button[aria-label="Send instruction"]')!);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(onPlanUpdated).not.toHaveBeenCalled();
+    expect(plan.timeline).toHaveLength(MAX_TIMELINE_TASKS);
+    expect(container.textContent).toContain('A plan can contain up to 500 tasks');
+    expect(container.textContent).toContain('Remove a task before adding another');
   });
 
   it('returns the updated plan from the shared local operation engine', () => {

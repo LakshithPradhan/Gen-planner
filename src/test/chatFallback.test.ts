@@ -11,9 +11,9 @@ describe('Deterministic chat fallback', () => {
     totalBudget: 100_000,
   });
 
-  function apply(message: string) {
-    const response = parseLocalChatRequest(message, plan);
-    const result = applyOperations(plan, response.operations);
+  function apply(message: string, currentPlan = plan) {
+    const response = parseLocalChatRequest(message, currentPlan);
+    const result = applyOperations(currentPlan, response.operations);
     return { ...response, ...result };
   }
 
@@ -50,6 +50,48 @@ describe('Deterministic chat fallback', () => {
     expect(apply(`Reopen task "${taskTitle}"`).updatedPlan.timeline[0].completed).toBe(false);
   });
 
+  it('matches tasks by exact ID or a unique case-insensitive full title', () => {
+    const task = plan.timeline[0];
+    const byId = apply(`Complete task "${task.id}"`);
+    const byTitle = apply(`Complete task "${task.title.toUpperCase()}"`);
+
+    expect(byId.updatedPlan.timeline.find((item) => item.id === task.id)?.completed).toBe(true);
+    expect(byTitle.updatedPlan.timeline.find((item) => item.id === task.id)?.completed).toBe(true);
+  });
+
+  it('rejects partial or ambiguous task titles without changing any task', () => {
+    const taskPlan = {
+      ...plan,
+      timeline: [
+        { ...plan.timeline[0], id: 'venue-task', title: 'Book venue' },
+        { ...plan.timeline[1], id: 'catering-task', title: 'Book catering' },
+      ],
+    };
+
+    for (const target of ['Book', 'venue final']) {
+      const result = apply(`Complete task "${target}"`, taskPlan);
+      expect(result.operations).toEqual([]);
+      expect(result.reply).toContain('clarify');
+      expect(result.updatedPlan.timeline).toEqual(taskPlan.timeline);
+    }
+
+    const duplicateTitlePlan = {
+      ...taskPlan,
+      timeline: [
+        { ...taskPlan.timeline[0], title: 'Book' },
+        { ...taskPlan.timeline[1], title: 'Book' },
+      ],
+    };
+    const ambiguous = apply('Complete task "Book"', duplicateTitlePlan);
+    expect(ambiguous.operations).toEqual([]);
+    expect(ambiguous.reply).toContain('exact ID or full name');
+    expect(ambiguous.updatedPlan.timeline).toEqual(duplicateTitlePlan.timeline);
+
+    const exactSimilarTitle = apply('Complete task "Book venue"', taskPlan);
+    expect(exactSimilarTitle.updatedPlan.timeline[0].completed).toBe(true);
+    expect(exactSimilarTitle.updatedPlan.timeline[1].completed).toBe(taskPlan.timeline[1].completed);
+  });
+
   it('adds vendors and updates their status', () => {
     const added = apply('Add vendor: Bluebird Photo, category: Photography, cost: ₹25,000, confirm: Confirm delivery dates');
     const vendor = added.updatedPlan.vendors.find((item) => item.name === 'Bluebird Photo');
@@ -61,8 +103,40 @@ describe('Deterministic chat fallback', () => {
 
     const currentVendor = plan.vendors.find((item) => item.category === 'Venue');
     expect(currentVendor).toBeDefined();
-    const updated = apply('Mark venue as Booked');
+    const updated = apply(`Mark ${currentVendor!.name} as Booked`);
     expect(updated.updatedPlan.vendors.find((item) => item.id === currentVendor?.id)?.status).toBe('Booked');
+  });
+
+  it('matches vendors by exact ID or a unique case-insensitive full name', () => {
+    const vendor = plan.vendors[0];
+    const byId = apply(`Mark ${vendor.id} as Contacted`);
+    const byName = apply(`Mark ${vendor.name.toUpperCase()} as Contacted`);
+
+    expect(byId.updatedPlan.vendors.find((item) => item.id === vendor.id)?.status).toBe('Contacted');
+    expect(byName.updatedPlan.vendors.find((item) => item.id === vendor.id)?.status).toBe('Contacted');
+  });
+
+  it('rejects partial and ambiguous vendor names without changing vendor data', () => {
+    const vendorPlan = {
+      ...plan,
+      vendors: [
+        { ...plan.vendors[0], id: 'vendor-one', name: 'Bluebird Photography' },
+        { ...plan.vendors[1], id: 'vendor-two', name: 'Bluebird Catering' },
+      ],
+    };
+    const partial = apply('Mark Bluebird as Booked', vendorPlan);
+    expect(partial.operations).toEqual([]);
+    expect(partial.reply).toContain('clarify');
+    expect(partial.updatedPlan.vendors).toEqual(vendorPlan.vendors);
+
+    const duplicateNamePlan = {
+      ...vendorPlan,
+      vendors: vendorPlan.vendors.map((vendor) => ({ ...vendor, name: 'Bluebird' })),
+    };
+    const ambiguous = apply('Mark Bluebird as Booked', duplicateNamePlan);
+    expect(ambiguous.operations).toEqual([]);
+    expect(ambiguous.reply).toContain('exact ID or full name');
+    expect(ambiguous.updatedPlan.vendors).toEqual(duplicateNamePlan.vendors);
   });
 
   it('updates the event date and its timeline dates', () => {
@@ -78,10 +152,10 @@ describe('Deterministic chat fallback', () => {
 
     const missingTask = parseLocalChatRequest('Complete task nonexistent task', plan);
     expect(missingTask.operations).toEqual([]);
-    expect(missingTask.reply).toContain('could not find that task');
+    expect(missingTask.reply).toContain('clarify');
 
     const missingVendor = parseLocalChatRequest('Mark the florist as Booked', plan);
     expect(missingVendor.operations).toEqual([]);
-    expect(missingVendor.reply).toContain('could not find that vendor');
+    expect(missingVendor.reply).toContain('clarify');
   });
 });
