@@ -144,7 +144,7 @@ export const PlanDashboard: React.FC<PlanDashboardProps> = ({
   };
 
   return (
-    <section id="dashboard" className="border-b border-white/10 px-4 py-12 sm:px-6 lg:px-8 bg-[#09090c]">
+    <section id="dashboard" className="readable-content border-b border-white/10 px-4 py-12 sm:px-6 lg:px-8 bg-[#09090c]">
       <div className="mx-auto max-w-7xl space-y-8">
         {/* Plan Header Strip */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 rounded-sm border border-white/10 bg-[#121217] p-6 shadow-xl">
@@ -164,7 +164,7 @@ export const PlanDashboard: React.FC<PlanDashboardProps> = ({
               </span>
             </div>
 
-            <h2 className="text-2xl sm:text-4xl font-serif-display uppercase text-white tracking-tight">
+            <h2 className="text-[2rem] sm:text-4xl font-serif-display uppercase text-white tracking-tight">
               {plan.eventName}
             </h2>
 

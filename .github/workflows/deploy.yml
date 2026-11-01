@@ -1,5 +1,5 @@
 
-name: Deploy Jashn to GitHub Pages
+name: Deploy Evora to GitHub Pages
 
 on:
   push:

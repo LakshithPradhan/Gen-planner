@@ -33,7 +33,7 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
     {
       id: 'welcome',
       sender: 'assistant',
-      text: `Hello! I am your Jashn Planning Co-Pilot. You can give me direct instructions to edit your plan. For example:\n• "Cut ₹50,000 but keep the band"\n• "Add 50 guests and rebalance catering"\n• "Mark the venue vendor as booked"\n• "Add task: Order wedding favours 10 days before"`,
+      text: `Hello! I am your Evora Planning Assistant. You can give me direct instructions to edit your plan. For example:\n• "Cut ₹50,000 but keep the band"\n• "Add 50 guests and rebalance catering"\n• "Mark the venue vendor as booked"\n• "Add task: Order wedding favours 10 days before"`,
       timestamp: 'Now',
     },
   ]);
@@ -124,7 +124,7 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-6 backdrop-blur-md"
+      className="readable-content fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-6 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
       aria-labelledby="chat-modal-title"

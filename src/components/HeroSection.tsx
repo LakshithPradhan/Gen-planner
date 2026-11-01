@@ -17,7 +17,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenInitiate, onLoad
         {/* Monospace telemetry pill */}
         <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3.5 py-1 text-[11px] uppercase tracking-widest text-zinc-300 backdrop-blur-md font-mono-code">
           <span className="h-1.5 w-1.5 rounded-full bg-[#0066ff] shadow-[0_0_6px_#0066ff]"></span>
-          <span>CAPABILITIES / WHAT WE PLAN &middot; GENAI ORCHESTRATION</span>
+          <span>CAPABILITIES / WHAT WE PLAN &middot; EVENT PLANNING</span>
         </div>
 
         {/* Huge condensed serif display heading with one italic blue word */}

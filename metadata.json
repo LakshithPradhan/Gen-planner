@@ -1,6 +1,6 @@
 {
-  "name": "Jashn – AI Celebration Planner",
-  "description": "GenAI-powered planning assistant that helps users organize weddings, birthdays, and community events with budgets, timelines, vendor checklists, and interactive AI chat edits.",
+  "name": "Evora – Event Planner",
+  "description": "Evora is an event planner for weddings, birthdays, and community celebrations, with budgets, timelines, vendor checklists, and flexible plan editing.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

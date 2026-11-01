@@ -86,13 +86,13 @@ export const CapabilitiesSection: React.FC = () => {
   ];
 
   return (
-    <section id="capabilities" className="border-b border-white/10 px-4 py-20 sm:px-6 lg:px-8 bg-[#08080a]">
+    <section id="capabilities" className="readable-content border-b border-white/10 px-4 py-20 sm:px-6 lg:px-8 bg-[#08080a]">
       <div className="mx-auto max-w-7xl">
         <div className="mb-12">
           <span className="text-xs uppercase tracking-widest text-[#0066ff] font-mono-code">
             CAPABILITIES // SYSTEM CAPACITIES
           </span>
-          <h2 className="mt-2 font-serif-display text-3xl sm:text-5xl uppercase tracking-tight text-white">
+          <h2 className="mt-2 font-serif-display text-[2rem] sm:text-5xl uppercase tracking-tight text-white">
             WHAT WE <span className="italic font-normal lowercase text-[#0066ff]">orchestrate</span>.
           </h2>
         </div>
@@ -121,7 +121,7 @@ export const CapabilitiesSection: React.FC = () => {
                       <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-mono-code block">
                         {cap.category}
                       </span>
-                      <h3 className="text-base sm:text-lg font-medium text-white group-hover:text-[#3b82f6] transition-colors">
+                      <h3 className="text-lg sm:text-xl font-medium text-white group-hover:text-[#3b82f6] transition-colors">
                         {cap.title}
                       </h3>
                     </div>

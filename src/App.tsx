@@ -175,7 +175,6 @@ export default function App() {
       <Navbar
         onOpenInitiate={() => setIsInitiateOpen(true)}
         onOpenChat={() => setIsChatOpen(true)}
-        onShare={handleShare}
         hasActivePlan={!!plan}
       />
 
@@ -234,7 +233,7 @@ export default function App() {
       {/* Share Modal */}
       {isShareModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          className="readable-content fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
         >
@@ -282,7 +281,7 @@ export default function App() {
       {/* Global Toast Notification */}
       {toastMessage && (
         <div
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-sm border border-[#0066ff]/40 bg-[#0e0e14] px-4 py-3 text-xs font-mono-code text-white shadow-[0_0_25px_rgba(0,102,255,0.4)] animate-in fade-in slide-in-from-bottom-3"
+          className="readable-content fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-sm border border-[#0066ff]/40 bg-[#0e0e14] px-4 py-3 text-xs font-mono-code text-white shadow-[0_0_25px_rgba(0,102,255,0.4)] animate-in fade-in slide-in-from-bottom-3"
           role="status"
           aria-live="polite"
         >

@@ -56,14 +56,14 @@ export const EventTypesSection: React.FC<EventTypesSectionProps> = ({ onSelectTy
   ];
 
   return (
-    <section id="events" className="border-b border-white/10 px-4 py-20 sm:px-6 lg:px-8 bg-[#09090c]">
+    <section id="events" className="readable-content border-b border-white/10 px-4 py-20 sm:px-6 lg:px-8 bg-[#09090c]">
       <div className="mx-auto max-w-7xl">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-12">
           <div>
             <span className="text-xs uppercase tracking-widest text-[#0066ff] font-mono-code">
               ARCHETYPES // FOUNDATIONAL SCHEMAS
             </span>
-            <h2 className="mt-2 font-serif-display text-3xl sm:text-5xl uppercase tracking-tight text-white">
+            <h2 className="mt-2 font-serif-display text-[2rem] sm:text-5xl uppercase tracking-tight text-white">
               ENGINEERED FOR <span className="italic font-normal lowercase text-[#0066ff]">any</span> SCALE.
             </h2>
           </div>
