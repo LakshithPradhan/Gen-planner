@@ -27,6 +27,18 @@ describe('Budget Module', () => {
     expect(normalized[1].percentage).toBe(50);
   });
 
+  it('distributes equal shares when every category starts at zero', () => {
+    const categories: BudgetCategory[] = [
+      { id: '1', name: 'Venue', percentage: 0, spent: 0 },
+      { id: '2', name: 'Food', percentage: 0, spent: 0 },
+      { id: '3', name: 'Decor', percentage: 0, spent: 0 },
+    ];
+
+    const normalized = normalizeBudgetCategories(categories);
+    expect(normalized.map((category) => category.percentage)).toEqual([34, 33, 33]);
+    expect(normalized.reduce((sum, category) => sum + category.percentage, 0)).toBe(100);
+  });
+
   it('correctly calculates per-guest planned and spent maths', () => {
     const categories: BudgetCategory[] = [
       { id: '1', name: 'Venue', percentage: 40, spent: 20000 },
@@ -53,5 +65,31 @@ describe('Budget Module', () => {
     const summary = calculateBudgetSummary(100000, 10, categories);
     expect(summary.isOverBudget).toBe(true);
     expect(summary.totalRemaining).toBe(-20000);
+  });
+
+  it('normalizes invalid category shares without producing non-finite percentages', () => {
+    const invalidShares: BudgetCategory[] = [
+      { id: '1', name: 'Venue', percentage: Number.NaN, spent: 0 },
+      { id: '2', name: 'Food', percentage: 50, spent: 0 },
+      { id: '3', name: 'Decor', percentage: -20, spent: 0 },
+    ];
+
+    const normalized = normalizeBudgetCategories(invalidShares);
+    expect(normalized.every((category) => Number.isFinite(category.percentage))).toBe(true);
+    expect(normalized.reduce((sum, category) => sum + category.percentage, 0)).toBe(100);
+    expect(normalized.map((category) => category.percentage)).toEqual([0, 100, 0]);
+  });
+
+  it('uses safe zero-budget and minimum-guest defaults for invalid calculation inputs', () => {
+    const categories: BudgetCategory[] = [
+      { id: '1', name: 'Venue', percentage: Number.POSITIVE_INFINITY, spent: Number.NaN },
+    ];
+    const summary = calculateBudgetSummary(Number.POSITIVE_INFINITY, Number.NaN, categories);
+
+    expect(summary.totalBudget).toBe(0);
+    expect(summary.totalSpent).toBe(0);
+    expect(summary.perGuestPlanned).toBe(0);
+    expect(summary.perGuestSpent).toBe(0);
+    expect(summary.categories[0].plannedAmount).toBe(0);
   });
 });

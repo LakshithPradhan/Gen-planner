@@ -1,5 +1,6 @@
 import { CelebrationPlan, EventType } from '../types/plan';
 import { normalizeBudgetCategories } from './budget';
+import { addDaysToDateOnly, getLocalDateOnly } from './dateOnly';
 
 export function getBuiltinTemplate(
   eventType: EventType,
@@ -17,7 +18,7 @@ export function getBuiltinTemplate(
   const city = customParams?.city || 'Jaipur';
   const targetDate =
     customParams?.date ||
-    new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    addDaysToDateOnly(getLocalDateOnly(), 90);
 
   if (eventType === 'wedding') {
     const totalBudget = customParams?.totalBudget || (currency === 'INR' ? 1800000 : 25000);

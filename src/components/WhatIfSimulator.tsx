@@ -4,6 +4,7 @@ import { calculatePlanHealth } from '../lib/healthScore';
 import { calculateBudgetSummary } from '../lib/budget';
 import { scaleTimelineTasks } from '../lib/timeline';
 import { formatCurrency, getDaysLeft } from '../lib/formatters';
+import { addDaysToDateOnly, getLocalDateOnly } from '../lib/dateOnly';
 import { Sliders, AlertTriangle, CheckCircle, ShieldAlert, ArrowRight, RotateCcw } from 'lucide-react';
 
 interface WhatIfSimulatorProps {
@@ -27,9 +28,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ plan, onApplyS
   }, [plan.guestCount, plan.totalBudget, plan.targetDate]);
 
   // Derive target date string for simulated days left
-  const simTargetDate = new Date();
-  simTargetDate.setDate(simTargetDate.getDate() + simDays);
-  const simTargetDateStr = simTargetDate.toISOString().split('T')[0];
+  const simTargetDateStr = addDaysToDateOnly(getLocalDateOnly(), simDays);
 
   // Construct simulated plan
   const simulatedPlan: CelebrationPlan = {

@@ -1,5 +1,6 @@
-import { CelebrationPlan, PlanOperation, VendorStatus } from '../types/plan';
+import { CelebrationPlan, PlanOperation } from '../types/plan';
 import { normalizeBudgetCategories } from './budget';
+import { addDaysToDateOnly } from './dateOnly';
 
 export interface DiffDetail {
   field: string;
@@ -12,12 +13,22 @@ export interface DiffDetail {
  * Pure function: applies a single structured edit operation to a plan immutably.
  */
 export function applyPlanOperation(plan: CelebrationPlan, op: PlanOperation): CelebrationPlan {
-  // Deep clone to guarantee immutability
-  const next: CelebrationPlan = JSON.parse(JSON.stringify(plan));
+  const next: CelebrationPlan = {
+    ...plan,
+    budgetCategories: plan.budgetCategories.map((category) => ({ ...category })),
+    timeline: plan.timeline.map((task) => ({ ...task })),
+    vendors: plan.vendors.map((vendor) => ({ ...vendor })),
+    ideas: plan.ideas.map((idea) => ({ ...idea })),
+  };
 
   switch (op.type) {
     case 'setBudgetTotal': {
       next.totalBudget = Math.max(1, Math.round(op.amount));
+      break;
+    }
+
+    case 'setEventName': {
+      next.eventName = op.eventName.trim();
       break;
     }
 
@@ -32,20 +43,33 @@ export function applyPlanOperation(plan: CelebrationPlan, op: PlanOperation): Ce
 
     case 'addTask': {
       const newId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const targetDate = new Date(next.targetDate || new Date().toISOString());
       const days = op.task.daysBeforeEvent ?? 14;
-      const dueDate = new Date(targetDate);
-      dueDate.setDate(targetDate.getDate() - days);
 
       next.timeline.push({
         id: newId,
         title: op.task.title,
         phase: op.task.phase || 'General',
         daysBeforeEvent: days,
-        dueDate: dueDate.toISOString().split('T')[0],
+        dueDate: addDaysToDateOnly(next.targetDate, -days),
         completed: false,
         isUrgent: op.task.isUrgent ?? false,
       });
+      break;
+    }
+
+    case 'updateTask': {
+      const task = next.timeline.find(
+        (t) => t.id === op.taskId || t.title.toLowerCase().includes(op.taskId.toLowerCase())
+      );
+      if (task) {
+        if (op.title !== undefined) task.title = op.title;
+        if (op.phase !== undefined) task.phase = op.phase;
+        if (op.isUrgent !== undefined) task.isUrgent = op.isUrgent;
+        if (op.daysBeforeEvent !== undefined) {
+          task.daysBeforeEvent = op.daysBeforeEvent;
+          task.dueDate = addDaysToDateOnly(next.targetDate, -op.daysBeforeEvent);
+        }
+      }
       break;
     }
 
@@ -72,11 +96,8 @@ export function applyPlanOperation(plan: CelebrationPlan, op: PlanOperation): Ce
     case 'setDate': {
       next.targetDate = op.date;
       // Re-anchor task due dates
-      const baseDate = new Date(op.date);
       next.timeline = next.timeline.map((t) => {
-        const d = new Date(baseDate);
-        d.setDate(baseDate.getDate() - (t.daysBeforeEvent || 0));
-        return { ...t, dueDate: d.toISOString().split('T')[0] };
+        return { ...t, dueDate: addDaysToDateOnly(op.date, -t.daysBeforeEvent) };
       });
       break;
     }
@@ -87,7 +108,7 @@ export function applyPlanOperation(plan: CelebrationPlan, op: PlanOperation): Ce
         id: newId,
         name: op.vendor.name,
         category: op.vendor.category,
-        estimatedCost: op.vendor.estimatedCost || 0,
+        estimatedCost: op.vendor.estimatedCost ?? 0,
         status: 'To contact',
         whatToConfirm: op.vendor.whatToConfirm,
       });
@@ -129,6 +150,15 @@ export function applyOperations(
  */
 export function generatePlanDiff(before: CelebrationPlan, after: CelebrationPlan): DiffDetail[] {
   const diffs: DiffDetail[] = [];
+
+  if (before.eventName !== after.eventName) {
+    diffs.push({
+      field: 'Event Name',
+      before: before.eventName,
+      after: after.eventName,
+      description: 'Updated celebration name',
+    });
+  }
 
   if (before.totalBudget !== after.totalBudget) {
     diffs.push({
@@ -201,6 +231,38 @@ export function generatePlanDiff(before: CelebrationPlan, after: CelebrationPlan
         before: beforeTask.completed ? 'Completed' : 'Pending',
         after: afterTask.completed ? 'Completed' : 'Pending',
         description: afterTask.completed ? 'Marked task as done' : 'Reopened task',
+      });
+    }
+    if (beforeTask && beforeTask.title !== afterTask.title) {
+      diffs.push({
+        field: 'Task Title',
+        before: beforeTask.title,
+        after: afterTask.title,
+        description: 'Updated timeline task',
+      });
+    }
+    if (beforeTask && beforeTask.daysBeforeEvent !== afterTask.daysBeforeEvent) {
+      diffs.push({
+        field: `Task Timing: ${afterTask.title}`,
+        before: `${beforeTask.daysBeforeEvent} days before`,
+        after: `${afterTask.daysBeforeEvent} days before`,
+        description: 'Updated task due date',
+      });
+    }
+    if (beforeTask && beforeTask.phase !== afterTask.phase) {
+      diffs.push({
+        field: `Task Phase: ${afterTask.title}`,
+        before: beforeTask.phase,
+        after: afterTask.phase,
+        description: 'Updated task phase',
+      });
+    }
+    if (beforeTask && beforeTask.isUrgent !== afterTask.isUrgent) {
+      diffs.push({
+        field: `Task Urgency: ${afterTask.title}`,
+        before: beforeTask.isUrgent ? 'Urgent' : 'Standard',
+        after: afterTask.isUrgent ? 'Urgent' : 'Standard',
+        description: 'Updated task urgency',
       });
     }
   });

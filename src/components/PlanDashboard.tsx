@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { CelebrationPlan, VendorStatus } from '../types/plan';
+import { CelebrationPlan } from '../types/plan';
 import { BudgetView } from './BudgetView';
 import { TimelineView } from './TimelineView';
 import { VendorChecklist } from './VendorChecklist';
 import { IdeasView } from './IdeasView';
 import { WhatIfSimulator } from './WhatIfSimulator';
-import { formatCurrency, formatDate, getDaysLeft } from '../lib/formatters';
+import { formatDate, getDaysLeft } from '../lib/formatters';
 import { exportPlanAsText } from '../lib/storage';
+import { usePlanEditor } from '../hooks/usePlanEditor';
 import {
   PieChart,
   CalendarCheck2,
@@ -16,7 +17,6 @@ import {
   Terminal,
   Download,
   Share2,
-  Sparkles,
   MapPin,
   Clock,
   RotateCcw,
@@ -26,7 +26,6 @@ interface PlanDashboardProps {
   plan: CelebrationPlan;
   onUpdatePlan: (updatedPlan: CelebrationPlan) => void;
   onOpenChat: () => void;
-  onOpenInitiate: () => void;
   onShare: () => void;
   canUndo: boolean;
   onUndo: () => void;
@@ -36,99 +35,25 @@ export const PlanDashboard: React.FC<PlanDashboardProps> = ({
   plan,
   onUpdatePlan,
   onOpenChat,
-  onOpenInitiate,
   onShare,
   canUndo,
   onUndo,
 }) => {
   const [activeTab, setActiveTab] = useState<'budget' | 'timeline' | 'vendors' | 'ideas' | 'whatif'>('budget');
   const [copiedExport, setCopiedExport] = useState(false);
+  const {
+    handleUpdateCategoryPct,
+    handleUpdateCategorySpent,
+    handleNormalizeBudget,
+    handleToggleTask,
+    handleAddTask,
+    handleUpdateVendorStatus,
+    handleAddVendor,
+    handleDeleteVendor,
+    handleAddIdeas,
+  } = usePlanEditor(plan, onUpdatePlan);
 
   const daysLeft = getDaysLeft(plan.targetDate);
-
-  // Budget category handlers
-  const handleUpdateCategoryPct = (catId: string, pct: number) => {
-    const nextCategories = plan.budgetCategories.map((c) =>
-      c.id === catId ? { ...c, percentage: Math.max(0, Math.min(100, pct)) } : c
-    );
-    onUpdatePlan({ ...plan, budgetCategories: nextCategories });
-  };
-
-  const handleUpdateCategorySpent = (catId: string, spent: number) => {
-    const nextCategories = plan.budgetCategories.map((c) =>
-      c.id === catId ? { ...c, spent: Math.max(0, spent) } : c
-    );
-    onUpdatePlan({ ...plan, budgetCategories: nextCategories });
-  };
-
-  const handleNormalizeBudget = () => {
-    // Normalization logic handled via re-calculating equal residue in parent or budget module
-    const sum = plan.budgetCategories.reduce((acc, c) => acc + (c.percentage || 0), 0);
-    if (sum === 0) return;
-    let acc = 0;
-    const normalized = plan.budgetCategories.map((c, i) => {
-      if (i === plan.budgetCategories.length - 1) {
-        return { ...c, percentage: Math.max(0, Math.round((100 - acc) * 10) / 10) };
-      }
-      const val = Math.round(((c.percentage / sum) * 100) * 10) / 10;
-      acc += val;
-      return { ...c, percentage: val };
-    });
-    onUpdatePlan({ ...plan, budgetCategories: normalized });
-  };
-
-  // Timeline handlers
-  const handleToggleTask = (taskId: string, completed: boolean) => {
-    const nextTimeline = plan.timeline.map((t) =>
-      t.id === taskId ? { ...t, completed } : t
-    );
-    onUpdatePlan({ ...plan, timeline: nextTimeline });
-  };
-
-  const handleAddTask = (title: string, daysBeforeEvent: number, phase: string, isUrgent: boolean) => {
-    const targetDate = new Date(plan.targetDate);
-    targetDate.setDate(targetDate.getDate() - daysBeforeEvent);
-    const newTask = {
-      id: `task_${Date.now()}`,
-      title,
-      phase,
-      daysBeforeEvent,
-      dueDate: targetDate.toISOString().split('T')[0],
-      completed: false,
-      isUrgent,
-    };
-    onUpdatePlan({ ...plan, timeline: [newTask, ...plan.timeline] });
-  };
-
-  // Vendor handlers
-  const handleUpdateVendorStatus = (vendorId: string, status: VendorStatus) => {
-    const nextVendors = plan.vendors.map((v) =>
-      v.id === vendorId ? { ...v, status } : v
-    );
-    onUpdatePlan({ ...plan, vendors: nextVendors });
-  };
-
-  const handleAddVendor = (newVendor: { name: string; category: string; estimatedCost: number; whatToConfirm: string }) => {
-    const vendorObj = {
-      id: `vendor_${Date.now()}`,
-      name: newVendor.name,
-      category: newVendor.category,
-      estimatedCost: newVendor.estimatedCost,
-      status: 'To contact' as VendorStatus,
-      whatToConfirm: newVendor.whatToConfirm,
-    };
-    onUpdatePlan({ ...plan, vendors: [...plan.vendors, vendorObj] });
-  };
-
-  const handleDeleteVendor = (vendorId: string) => {
-    const nextVendors = plan.vendors.filter((v) => v.id !== vendorId);
-    onUpdatePlan({ ...plan, vendors: nextVendors });
-  };
-
-  // Ideas handler
-  const handleAddIdeas = (newIdeas: any[]) => {
-    onUpdatePlan({ ...plan, ideas: [...plan.ideas, ...newIdeas] });
-  };
 
   const handleExportBrief = () => {
     const briefText = exportPlanAsText(plan);
@@ -216,19 +141,23 @@ export const PlanDashboard: React.FC<PlanDashboardProps> = ({
 
         {/* Tab Switcher */}
         <div className="flex overflow-x-auto border-b border-white/10 pb-px gap-2">
-          {[
+          {([
             { id: 'budget', label: 'Financials & Budget', icon: PieChart },
             { id: 'timeline', label: 'Temporal Timeline', icon: CalendarCheck2 },
             { id: 'vendors', label: 'Procurement & Vendors', icon: Users },
             { id: 'ideas', label: 'Personalised Ideas', icon: Lightbulb },
             { id: 'whatif', label: 'What-If Lab & Health', icon: Sliders },
-          ].map((tab) => {
+          ] satisfies Array<{
+            id: typeof activeTab;
+            label: string;
+            icon: typeof PieChart;
+          }>).map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 whitespace-nowrap px-4 py-3 text-xs font-mono-code uppercase border-b-2 transition-all cursor-pointer ${
                   isActive
                     ? 'border-[#0066ff] bg-[#0066ff]/10 text-white font-semibold'

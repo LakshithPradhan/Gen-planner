@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { CelebrationPlan, PlanOperation } from '../types/plan';
+import React, { useRef, useState } from 'react';
+import { CelebrationPlan, ChatResponseSchema, PlanOperation } from '../types/plan';
 import { applyOperations, DiffDetail } from '../lib/operations';
-import { Terminal, Send, Sparkles, RotateCcw, X, MessageSquare, Loader2 } from 'lucide-react';
+import { parseLocalChatRequest } from '../lib/chatFallback';
+import { useDialogAccessibility } from '../hooks/useDialogAccessibility';
+import { Terminal, Send, Sparkles, RotateCcw, X, Loader2 } from 'lucide-react';
 
 interface ChatMessage {
   id: string;
@@ -33,13 +35,15 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
     {
       id: 'welcome',
       sender: 'assistant',
-      text: `Hello! I am your Evora Planning Assistant. You can give me direct instructions to edit your plan. For example:\n• "Cut ₹50,000 but keep the band"\n• "Add 50 guests and rebalance catering"\n• "Mark the venue vendor as booked"\n• "Add task: Order wedding favours 10 days before"`,
+      text: `Hello! I am your Evora Planning Assistant. You can give me direct instructions to edit your plan. For example:\n• "Rename event to Summer Celebration"\n• "Cut ₹50,000" or "Add 50 guests"\n• "Rename task Book Venue to Confirm Venue"\n• "Mark venue as booked" or "Add vendor: Bluebird Photo, category: Photography"`,
       timestamp: 'Now',
     },
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [ariaLiveAnnouncement, setAriaLiveAnnouncement] = useState('');
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useDialogAccessibility(isOpen, onClose, dialogRef, '#chat-instruction');
 
   if (!isOpen) return null;
 
@@ -80,24 +84,42 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
         throw new Error(`Chat API error (${response.status})`);
       }
 
-      const data = await response.json();
-      const operations: PlanOperation[] = data.operations || [];
-      const reply = data.reply || 'Updated your plan.';
+      const parsedResponse = ChatResponseSchema.safeParse(await response.json());
+      if (!parsedResponse.success) {
+        throw new Error('Chat API returned an invalid response');
+      }
+
+      let operations: PlanOperation[] = parsedResponse.data.operations;
+      let reply = parsedResponse.data.reply;
+      if (operations.length === 0) {
+        const localResponse = parseLocalChatRequest(textToSend, plan);
+        operations = localResponse.operations;
+        reply = localResponse.reply;
+      }
 
       if (operations.length > 0) {
         const { updatedPlan, diffs } = applyOperations(plan, operations);
-        onPlanUpdated(updatedPlan, diffs, reply);
-
-        const assistantMsg: ChatMessage = {
-          id: `ai_${Date.now()}`,
-          sender: 'assistant',
-          text: reply,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          diffs,
-          operationsCount: operations.length,
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
-        setAriaLiveAnnouncement(`Plan updated: ${diffs.length} changes applied. ${reply}`);
+        if (diffs.length > 0) {
+          onPlanUpdated(updatedPlan, diffs, reply);
+          setMessages((prev) => [...prev, {
+            id: `ai_${Date.now()}`,
+            sender: 'assistant',
+            text: reply,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            diffs,
+            operationsCount: operations.length,
+          }]);
+          setAriaLiveAnnouncement(`Plan updated: ${diffs.length} changes applied. ${reply}`);
+        } else {
+          const noChangeReply = 'No plan changes were needed or applied.';
+          setMessages((prev) => [...prev, {
+            id: `ai_${Date.now()}`,
+            sender: 'assistant',
+            text: noChangeReply,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }]);
+          setAriaLiveAnnouncement(noChangeReply);
+        }
       } else {
         const assistantMsg: ChatMessage = {
           id: `ai_${Date.now()}`,
@@ -110,24 +132,55 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
       }
     } catch (err) {
       console.error('Chat error:', err);
-      const errorMsg: ChatMessage = {
-        id: `err_${Date.now()}`,
-        sender: 'assistant',
-        text: 'I could not connect to the remote server, but I will simulate your change locally.',
-        timestamp: 'Now',
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      const localResponse = parseLocalChatRequest(textToSend, plan);
+      if (localResponse.operations.length > 0) {
+        const { updatedPlan, diffs } = applyOperations(plan, localResponse.operations);
+        if (diffs.length > 0) {
+          onPlanUpdated(updatedPlan, diffs, localResponse.reply);
+          setMessages((prev) => [...prev, {
+            id: `local_${Date.now()}`,
+            sender: 'assistant',
+            text: `Local mode: ${localResponse.reply}`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            diffs,
+            operationsCount: localResponse.operations.length,
+          }]);
+          setAriaLiveAnnouncement(`Plan updated locally: ${diffs.length} changes applied. ${localResponse.reply}`);
+        } else {
+          const noChangeReply = 'No plan changes were needed or applied.';
+          setMessages((prev) => [...prev, {
+            id: `local_${Date.now()}`,
+            sender: 'assistant',
+            text: `Local mode: ${noChangeReply}`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }]);
+          setAriaLiveAnnouncement(noChangeReply);
+        }
+      } else {
+        setMessages((prev) => [...prev, {
+          id: `err_${Date.now()}`,
+          sender: 'assistant',
+          text: `Local mode: ${localResponse.reply}`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }]);
+        setAriaLiveAnnouncement(localResponse.reply);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div
+    <dialog
+      open
+      ref={dialogRef}
       className="readable-content fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-6 backdrop-blur-md"
-      role="dialog"
       aria-modal="true"
       aria-labelledby="chat-modal-title"
+      tabIndex={-1}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
     >
       {/* ARIA Live Region for screen reader accessibility */}
       <div className="sr-only" aria-live="polite">
@@ -241,6 +294,11 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
           ))}
         </div>
 
+        <p className="border-t border-white/5 bg-[#0e0e13] px-4 py-1 text-xs leading-relaxed text-zinc-300" role="note">
+          If configured, your instruction and limited plan details (date, guests, budget, vendor
+          names, task titles) may be sent to Anthropic and/or Google Gemini. Avoid personal or sensitive details.
+        </p>
+
         {/* Input Bar */}
         <form
           onSubmit={(e) => {
@@ -250,6 +308,7 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
           className="border-t border-white/10 bg-[#101015] p-3 flex items-center gap-2"
         >
           <input
+            id="chat-instruction"
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -268,6 +327,6 @@ export const PlanChatModal: React.FC<PlanChatModalProps> = ({
           </button>
         </form>
       </div>
-    </div>
+    </dialog>
   );
 };

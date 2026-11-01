@@ -1,14 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { CelebrationPlan, EventType, PlanRequestInput } from './types/plan';
+import {
+  CelebrationPlan,
+  EventType,
+  PlanRequestInput,
+  PlanRequestSchema,
+} from './types/plan';
+import { requestGeneratedPlan } from './lib/planApi';
 import { getBuiltinTemplate } from './lib/templates';
 import {
   savePlanToStorage,
   loadPlanFromStorage,
   generateShareUrl,
   parseSharedPlanFromUrl,
+  hasInvalidStoredPlan,
+  getPlanRestoreWarning,
 } from './lib/storage';
 import { DiffDetail } from './lib/operations';
+import { copyTextToClipboard } from './lib/clipboard';
+import { useDialogAccessibility } from './hooks/useDialogAccessibility';
+import { applyGenerationModules, GENERATION_MODULES } from './lib/generationModules';
 import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
 import { EventTypesSection } from './components/EventTypesSection';
@@ -30,6 +41,8 @@ export default function App() {
     if (stored) return stored;
     return getBuiltinTemplate('wedding');
   });
+  const initialPlanRef = useRef(plan);
+  const preserveInvalidSavedPlan = useRef(hasInvalidStoredPlan());
 
   // Undo Stack: array of previous snapshots
   const [undoStack, setUndoStack] = useState<CelebrationPlan[]>([]);
@@ -40,13 +53,20 @@ export default function App() {
   const [isDiffOpen, setIsDiffOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
+  const shareDialogRef = useRef<HTMLDialogElement>(null);
+  useDialogAccessibility(
+    isShareModalOpen,
+    () => setIsShareModalOpen(false),
+    shareDialogRef,
+    '#share-link'
+  );
 
   const [currentDiffs, setCurrentDiffs] = useState<DiffDetail[]>([]);
   const [aiExplanation, setAiExplanation] = useState('');
   const [isLoadingPlan, setIsLoadingPlan] = useState(false);
 
   // Transient Toast Notification
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(() => getPlanRestoreWarning());
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -57,6 +77,7 @@ export default function App() {
 
   // Sync with localStorage
   useEffect(() => {
+    if (preserveInvalidSavedPlan.current && plan === initialPlanRef.current) return;
     savePlanToStorage(plan);
   }, [plan]);
 
@@ -105,19 +126,15 @@ export default function App() {
 
   // Submit Brief from CommandCenter
   const handleInitiatePlan = async (params: PlanRequestInput) => {
+    const request = PlanRequestSchema.safeParse(params);
+    if (!request.success) {
+      showToast(request.error.issues[0]?.message ?? 'Please check the plan details and try again.');
+      return;
+    }
+
     setIsLoadingPlan(true);
     try {
-      const res = await fetch('/api/plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params),
-      });
-
-      if (!res.ok) {
-        throw new Error(`Server returned status ${res.status}`);
-      }
-
-      const newPlan: CelebrationPlan = await res.json();
+      const newPlan = await requestGeneratedPlan(request.data);
       setUndoStack((prev) => [...prev.slice(-15), plan]);
       setPlan(newPlan);
       setIsInitiateOpen(false);
@@ -131,18 +148,22 @@ export default function App() {
     } catch (err) {
       console.warn('API call fallback to built-in generator:', err);
       const fallbackPlan = getBuiltinTemplate(params.eventType, {
-        eventName: params.eventName,
-        date: params.date,
-        guests: params.guests,
-        currency: params.currency,
-        totalBudget: params.totalBudget,
-        city: params.city,
-        vibeNotes: params.vibeNotes,
+        eventName: request.data.eventName,
+        date: request.data.date,
+        guests: request.data.guests,
+        currency: request.data.currency,
+        totalBudget: request.data.totalBudget,
+        city: request.data.city,
+        vibeNotes: request.data.vibeNotes,
       });
+      const generatedPlan = applyGenerationModules(
+        fallbackPlan,
+        request.data.selectedModules ?? GENERATION_MODULES
+      );
       setUndoStack((prev) => [...prev.slice(-15), plan]);
-      setPlan(fallbackPlan);
+      setPlan(generatedPlan);
       setIsInitiateOpen(false);
-      showToast(`Formulated plan for "${fallbackPlan.eventName}" (Offline Generator)`);
+      showToast(`Formulated plan for "${generatedPlan.eventName}" (Offline Generator)`);
 
       setTimeout(() => {
         const dash = document.getElementById('dashboard');
@@ -156,14 +177,16 @@ export default function App() {
   // Share link handler
   const handleShare = () => {
     const url = generateShareUrl(plan);
+    if (!url) {
+      showToast('Could not create a share link. Your plan remains saved on this device.');
+      return;
+    }
     setShareUrl(url);
     setIsShareModalOpen(true);
-    try {
-      navigator.clipboard.writeText(url);
-      showToast('Share link copied to clipboard!');
-    } catch {
-      // Handled in modal
-    }
+    void copyTextToClipboard(url).then((copied) => {
+      if (copied) showToast('Share link copied to clipboard!');
+      else showToast('Share link ready. Clipboard access failed; copy it from the dialog.');
+    });
   };
 
   return (
@@ -193,7 +216,6 @@ export default function App() {
           plan={plan}
           onUpdatePlan={handleUpdatePlan}
           onOpenChat={() => setIsChatOpen(true)}
-          onOpenInitiate={() => setIsInitiateOpen(true)}
           onShare={handleShare}
           canUndo={undoStack.length > 0}
           onUndo={handleUndo}
@@ -232,41 +254,53 @@ export default function App() {
 
       {/* Share Modal */}
       {isShareModalOpen && (
-        <div
+        <dialog
+          open
+          ref={shareDialogRef}
           className="readable-content fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-          role="dialog"
           aria-modal="true"
+          aria-labelledby="share-dialog-title"
+          tabIndex={-1}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setIsShareModalOpen(false);
+          }}
         >
           <div className="w-full max-w-lg rounded-sm border border-white/15 bg-[#101014] p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
-              <h3 className="text-sm font-semibold uppercase font-mono-code text-white flex items-center gap-2">
+              <h3 id="share-dialog-title" className="text-sm font-semibold uppercase font-mono-code text-white flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-[#0066ff]" />
                 Shareable Celebration Blueprint
               </h3>
               <button
                 onClick={() => setIsShareModalOpen(false)}
                 className="text-zinc-400 hover:text-white p-1 rounded-xs"
+                aria-label="Close share dialog"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             <p className="text-xs text-zinc-400 font-light mb-4">
-              This URL encapsulates your entire celebration plan within a compressed hash. Anyone
-              opening this link can view the exact budget splits, timelines, vendors, and ideas!
+              This URL contains a Base64-encoded copy of your plan in its hash. Anyone with the
+              link can view its budget splits, timeline, vendors, and ideas.
             </p>
 
             <div className="flex items-center gap-2">
               <input
+                id="share-link"
                 type="text"
                 readOnly
+                aria-label="Share link"
                 value={shareUrl}
                 className="flex-1 rounded-xs border border-white/10 bg-black/60 px-3 py-2 text-xs font-mono-code text-zinc-300 focus:outline-none"
               />
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(shareUrl);
-                  showToast('Copied to clipboard!');
+                  void copyTextToClipboard(shareUrl).then((copied) => {
+                    showToast(copied
+                      ? 'Copied to clipboard!'
+                      : 'Clipboard access failed. Select and copy the share link manually.');
+                  });
                 }}
                 className="flex items-center gap-1 rounded-xs bg-[#0066ff] px-4 py-2 text-xs font-mono-code uppercase font-semibold text-white hover:bg-[#0052cc] transition-all cursor-pointer"
               >
@@ -275,7 +309,7 @@ export default function App() {
               </button>
             </div>
           </div>
-        </div>
+        </dialog>
       )}
 
       {/* Global Toast Notification */}

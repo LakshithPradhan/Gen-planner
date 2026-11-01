@@ -28,47 +28,68 @@ export const IdeasView: React.FC<IdeasViewProps> = ({ ideas, plan, onAddIdeas })
     return i.tag === activeTag;
   });
 
-  // Generates 3 new creative ideas ensuring no title collisions
-  const handleLoadMore = () => {
-    setIsLoadingMore(true);
-    setTimeout(() => {
-      const existingTitles = new Set(ideas.map((i) => i.title.toLowerCase()));
-
-      const ideaPool = [
+  const ideaPool = plan.eventType === 'wedding'
+    ? [
+      {
+        title: `Couple Story Table Cards in ${plan.city}`,
+        tag: 'Memory Keeper',
+        description: `Invite guests to share a brief memory or wish about the couple at each table, creating a keepsake shaped by the people who came to celebrate.`,
+      },
+      {
+        title: `Quiet Lounge for Wedding Guests`,
+        tag: 'Guest Comfort',
+        description: `Set aside a softly lit seating area near the celebration for guests who want a calm break between ceremonies and dancing.`,
+      },
+      {
+        title: `Family Recipe Card Exchange`,
+        tag: 'Culinary Delight',
+        description: `Collect favorite family recipes before the wedding and display them as a small, personal recipe booklet for guests.`,
+      },
+    ]
+    : plan.eventType === 'birthday'
+      ? [
         {
-          title: `Artisanal Chai & Kahwa Bar by ${plan.city} Tea Masters`,
-          tag: 'Culinary Delight',
-          description: `Freshly brewed Kashmiri Kahwa and masala cutting chai served in earthen kulhads with roasted pistachio snacks.`,
-        },
-        {
-          title: `Custom Live Sketch Artist for Guest Portraits`,
+          title: `A Birthday Story Wall for ${plan.city}`,
           tag: 'Memory Keeper',
-          description: `A 3-minute charcoal caricature station providing every guest an instant framed keepsake to take home.`,
+          description: `Invite ${plan.guestCount} guests to add a short note, photo, or favorite memory of the celebrant to a shared display during the party.`,
         },
         {
-          title: `Interactive LED Wristbands Synchronized to Beats`,
+          title: `Choose-Your-Own Birthday Toast`,
           tag: 'Crowd Energy',
-          description: `Wearable RF wristbands that illuminate in sync with the DJ bass drops during the high-energy dance session.`,
+          description: `Let guests vote on a few lighthearted prompts for a short toast that reflects the celebrant and the people gathered.`,
         },
         {
-          title: `Mid-Evening Fireworks / Cold Spark Fountain Salute`,
-          tag: 'Highlight Moment',
-          description: `Indoor-safe pyrotechnic cold sparks creating a dramatic stage canopy for the celebrant entrance.`,
+          title: `Birthday Guest Comfort Corner`,
+          tag: 'Guest Comfort',
+          description: `Offer a quieter seating area away from the music so guests can recharge and enjoy the celebration at their own pace.`,
+        },
+      ]
+      : [
+        {
+          title: `${plan.city} Community Makers Showcase`,
+          tag: 'Local Community',
+          description: `Invite local makers or community groups to share a small display that reflects the people and traditions represented at the event.`,
         },
         {
-          title: `Scent Bar: Bespoke Ittar / Perfume Mixing Booth`,
-          tag: 'Aesthetic Decor',
-          description: `Guests blend custom miniature oud, jasmine, or sandalwood perfumes sealed in antique roll-on vials.`,
+          title: 'Accessible Quiet and Rest Area',
+          tag: 'Guest Comfort',
+          description: `Provide a clearly marked, comfortable low-noise space with accessible seating for guests who need a break from the main gathering.`,
         },
         {
-          title: `Midnight Street Snack Cart Surprise`,
-          tag: 'Night Surprise',
-          description: `A surprise midnight arrival of local street-food carts serving hot pav bhaji, rolls, or churros to dance floor survivors.`,
+          title: 'Reusable Serving and Sorting Stations',
+          tag: 'Sustainable Touch',
+          description: `Set up clearly signed reusable dish return and waste-sorting points for ${plan.guestCount} guests to make cleanup easier and reduce disposable materials.`,
         },
       ];
+  const existingTitles = new Set(ideas.map((idea) => idea.title.toLowerCase()));
+  const availableIdeas = ideaPool.filter((idea) => !existingTitles.has(idea.title.toLowerCase()));
 
-      const freshOnes = ideaPool
-        .filter((cand) => !existingTitles.has(cand.title.toLowerCase()))
+  // Generates 3 new creative ideas ensuring no title collisions
+  const handleLoadMore = () => {
+    if (availableIdeas.length === 0 || isLoadingMore) return;
+    setIsLoadingMore(true);
+    setTimeout(() => {
+      const freshOnes = availableIdeas
         .slice(0, 3)
         .map((cand, idx) => ({
           id: `more_idea_${Date.now()}_${idx}`,
@@ -100,7 +121,8 @@ export const IdeasView: React.FC<IdeasViewProps> = ({ ideas, plan, onAddIdeas })
 
         <button
           onClick={handleLoadMore}
-          disabled={isLoadingMore}
+          disabled={isLoadingMore || availableIdeas.length === 0}
+          aria-describedby="ideas-generation-status"
           className="flex items-center gap-1.5 rounded-sm bg-[#0066ff] px-3.5 py-1.5 text-xs font-mono-code uppercase text-white hover:bg-[#0055d4] transition-all shadow-[0_0_15px_rgba(0,102,255,0.4)] cursor-pointer disabled:opacity-50"
         >
           {isLoadingMore ? (
@@ -111,6 +133,13 @@ export const IdeasView: React.FC<IdeasViewProps> = ({ ideas, plan, onAddIdeas })
           <span>{isLoadingMore ? 'Curating...' : 'More Ideas'}</span>
         </button>
       </div>
+      <p id="ideas-generation-status" className="sr-only" aria-live="polite">
+        {isLoadingMore
+          ? 'Generating event-specific ideas.'
+          : availableIdeas.length === 0
+            ? 'No additional event-specific ideas are available.'
+            : `${availableIdeas.length} additional event-specific ideas available.`}
+      </p>
 
       {/* Tags Filter */}
       <div className="flex flex-wrap items-center gap-1.5">
@@ -201,6 +230,15 @@ export const IdeasView: React.FC<IdeasViewProps> = ({ ideas, plan, onAddIdeas })
           );
         })}
       </div>
+      {filteredIdeas.length === 0 && (
+        <p className="rounded-sm border border-white/10 bg-[#101014] p-6 text-center text-sm text-zinc-300" role="status">
+          {ideas.length === 0
+            ? 'No ideas are available yet. Choose More Ideas to generate suggestions for this event.'
+            : activeTag === 'saved'
+              ? 'No saved ideas yet. Bookmark an idea to find it here.'
+              : 'No ideas match this category.'}
+        </p>
+      )}
     </div>
   );
 };

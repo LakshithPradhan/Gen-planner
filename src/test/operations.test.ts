@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { applyPlanOperation, applyOperations, generatePlanDiff } from '../lib/operations';
+import { applyPlanOperation, applyOperations } from '../lib/operations';
 import { getBuiltinTemplate } from '../lib/templates';
 import { CelebrationPlan, PlanOperation } from '../types/plan';
+import { addDaysToDateOnly } from '../lib/dateOnly';
 
 describe('Plan Operations Engine', () => {
   const initialPlan: CelebrationPlan = getBuiltinTemplate('birthday', {
@@ -22,6 +23,24 @@ describe('Plan Operations Engine', () => {
     const updated = applyPlanOperation(initialPlan, op);
     expect(updated.guestCount).toBe(75);
     expect(initialPlan.guestCount).toBe(50);
+  });
+
+  it('creates and edits event details without mutating the source plan', () => {
+    const renamed = applyPlanOperation(initialPlan, {
+      type: 'setEventName',
+      eventName: 'Updated Birthday',
+    });
+    const rescheduled = applyPlanOperation(renamed, {
+      type: 'setDate',
+      date: '2027-08-12',
+    });
+
+    expect(rescheduled.eventName).toBe('Updated Birthday');
+    expect(rescheduled.targetDate).toBe('2027-08-12');
+    expect(rescheduled.timeline[0].dueDate).toBe(
+      addDaysToDateOnly('2027-08-12', -rescheduled.timeline[0].daysBeforeEvent)
+    );
+    expect(initialPlan.eventName).not.toBe('Updated Birthday');
   });
 
   it('adds and removes timeline tasks', () => {
@@ -60,7 +79,7 @@ describe('Plan Operations Engine', () => {
       { type: 'setGuests', count: 80 },
     ];
 
-    const { updatedPlan, diffs } = applyOperations(initialPlan, ops);
+    const { diffs } = applyOperations(initialPlan, ops);
 
     expect(diffs.length).toBe(2);
     expect(diffs.some((d) => d.field === 'Total Budget')).toBe(true);

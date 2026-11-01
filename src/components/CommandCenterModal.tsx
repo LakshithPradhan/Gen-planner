@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
-import { EventType, CurrencyCode, PlanRequestInput } from '../types/plan';
+import React, { useRef, useState } from 'react';
+import { EventType, CurrencyCode, GenerationModule, PlanRequestInput } from '../types/plan';
+import { GENERATION_MODULES, INFORMATIONAL_MODULES } from '../lib/generationModules';
+import { addDaysToDateOnly, getLocalDateOnly } from '../lib/dateOnly';
+import { useDialogAccessibility } from '../hooks/useDialogAccessibility';
 import { Sparkles, Terminal, X, Check, Loader2, ArrowRight } from 'lucide-react';
 
 interface CommandCenterModalProps {
@@ -17,11 +20,7 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
 }) => {
   const [eventType, setEventType] = useState<EventType>('wedding');
   const [eventName, setEventName] = useState('Ananya & Rohan’s Royal Wedding');
-  const [date, setDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 90);
-    return d.toISOString().split('T')[0];
-  });
+  const [date, setDate] = useState(() => addDaysToDateOnly(getLocalDateOnly(), 90));
   const [guests, setGuests] = useState(350);
   const [currency, setCurrency] = useState<CurrencyCode>('INR');
   const [totalBudget, setTotalBudget] = useState(1800000);
@@ -31,25 +30,13 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
   );
 
   // Selected modules
-  const [selectedModules, setSelectedModules] = useState<string[]>([
-    'Budget Normalisation',
-    'Compressed Timeline',
-    'Vendor Directory',
-    'City Ideas',
-  ]);
+  const [selectedModules, setSelectedModules] = useState<GenerationModule[]>([...GENERATION_MODULES]);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useDialogAccessibility(isOpen, onClose, dialogRef, '#command-event-name');
 
   if (!isOpen) return null;
 
-  const availableModules = [
-    'Budget Normalisation',
-    'Compressed Timeline',
-    'Vendor Directory',
-    'City Ideas',
-    'What-If Simulator',
-    'Conversational Chat Editor',
-  ];
-
-  const toggleModule = (mod: string) => {
+  const toggleModule = (mod: GenerationModule) => {
     setSelectedModules((prev) =>
       prev.includes(mod) ? prev.filter((m) => m !== mod) : [...prev, mod]
     );
@@ -89,17 +76,23 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
       totalBudget,
       city,
       vibeNotes,
+      selectedModules,
     });
   };
 
   return (
-    <div
-      className="readable-content fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-6 backdrop-blur-md overflow-y-auto"
-      role="dialog"
+    <dialog
+      open
+      ref={dialogRef}
+      className="readable-content fixed inset-0 z-50 flex items-start justify-center bg-black/85 p-3 sm:items-center sm:p-6 backdrop-blur-md overflow-y-auto"
       aria-modal="true"
       aria-labelledby="command-center-title"
+      tabIndex={-1}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
     >
-      <div className="relative my-8 w-full max-w-3xl rounded-sm border border-white/15 bg-[#0e0e12] p-6 sm:p-8 shadow-2xl">
+      <div className="relative my-0 w-full max-w-3xl rounded-sm border border-white/15 bg-[#0e0e12] p-6 sm:my-8 sm:p-8 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-6">
           <div className="flex items-center gap-3">
@@ -157,19 +150,17 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] font-mono-code uppercase text-zinc-400">
-              ENGAGED PLANNING MODULES:
+              OPTIONAL GENERATED CONTENT:
             </span>
             <span className="text-[11px] font-mono-code text-[#3b82f6]">
               {selectedModules.length === 0
-                ? 'Modules: [none selected]'
-                : `Modules: ${selectedModules.length} selected (${selectedModules.slice(0, 2).join(', ')}${
-                    selectedModules.length > 2 ? '...' : ''
-                  })`}
+                ? 'No optional content selected'
+                : `${selectedModules.length} selected`}
             </span>
           </div>
 
           <div className="flex flex-wrap gap-1.5">
-            {availableModules.map((mod) => {
+            {GENERATION_MODULES.map((mod) => {
               const isSelected = selectedModules.includes(mod);
               return (
                 <button
@@ -190,6 +181,21 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
               );
             })}
           </div>
+          <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">
+            Vendor Directory and City Ideas control which generated sections are included. Budget
+            Normalisation, Compressed Timeline, What-If Simulator, and Conversational Chat Editor
+            are informational: these core features remain available on every plan.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Always available planning features">
+            {INFORMATIONAL_MODULES.map((mod) => (
+              <span
+                key={mod}
+                className="rounded-xs border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-mono-code text-zinc-400"
+              >
+                {mod} · Always available
+              </span>
+            ))}
+          </div>
         </div>
 
         {/* Detailed Brief Form */}
@@ -200,6 +206,7 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
                 Event Name / Title
               </label>
               <input
+                id="command-event-name"
                 type="text"
                 required
                 value={eventName}
@@ -260,7 +267,7 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
                 <input
                   type="number"
                   min="1000"
-                  step="5000"
+                  step="1000"
                   required
                   value={totalBudget}
                   onChange={(e) => setTotalBudget(parseFloat(e.target.value) || 0)}
@@ -295,6 +302,12 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
                 className="w-full rounded-xs border border-white/15 bg-black/60 p-3 text-xs text-white focus:border-[#0066ff] focus:outline-none font-light leading-relaxed"
               />
             </div>
+            <p className="sm:col-span-2 text-xs text-zinc-400" role="note">
+              Privacy: when AI providers are configured, event type, date, guest count, budget,
+              city, and these notes may be sent to Anthropic and/or Google Gemini to generate suggestions.
+              Avoid personal, contact, or otherwise sensitive details. Offline generation stays on
+              this device.
+            </p>
           </div>
 
           {/* Form Actions */}
@@ -329,6 +342,6 @@ export const CommandCenterModal: React.FC<CommandCenterModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </dialog>
   );
 };

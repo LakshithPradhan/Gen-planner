@@ -1,6 +1,6 @@
 import React from 'react';
 import { BudgetCategory, CurrencyCode } from '../types/plan';
-import { calculateBudgetSummary, normalizeBudgetCategories } from '../lib/budget';
+import { calculateBudgetSummary } from '../lib/budget';
 import { formatCurrency } from '../lib/formatters';
 import { DonutChart } from './DonutChart';
 import { AlertCircle, CheckCircle2, RotateCcw, Scale } from 'lucide-react';

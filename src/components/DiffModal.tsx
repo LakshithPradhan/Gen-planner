@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { DiffDetail } from '../lib/operations';
+import { useDialogAccessibility } from '../hooks/useDialogAccessibility';
 import { Check, RotateCcw, X, GitCompare } from 'lucide-react';
 
 interface DiffModalProps {
@@ -17,14 +18,22 @@ export const DiffModal: React.FC<DiffModalProps> = ({
   aiExplanation,
   onUndo,
 }) => {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useDialogAccessibility(isOpen, onClose, dialogRef, '#diff-title');
+
   if (!isOpen) return null;
 
   return (
-    <div
+    <dialog
+      open
+      ref={dialogRef}
       className="readable-content fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-      role="dialog"
       aria-modal="true"
       aria-labelledby="diff-title"
+      tabIndex={-1}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
     >
       <div className="relative w-full max-w-2xl rounded-sm border border-white/15 bg-[#101014] p-6 shadow-2xl">
         {/* Header */}
@@ -34,7 +43,7 @@ export const DiffModal: React.FC<DiffModalProps> = ({
               <GitCompare className="h-4 w-4" />
             </div>
             <div>
-              <h3 id="diff-title" className="text-sm font-semibold uppercase font-mono-code text-white">
+              <h3 id="diff-title" tabIndex={-1} className="text-sm font-semibold uppercase font-mono-code text-white">
                 Plan Mutation Review (Before vs After)
               </h3>
               <span className="text-[10px] text-zinc-400 font-mono-code">
@@ -116,6 +125,6 @@ export const DiffModal: React.FC<DiffModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 };

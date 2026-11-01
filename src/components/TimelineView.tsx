@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { TimelineTask } from '../types/plan';
 import { scaleTimelineTasks } from '../lib/timeline';
 import { getDaysLeft, formatDate } from '../lib/formatters';
-import { CheckCircle, Circle, AlertTriangle, Calendar, Plus, Clock } from 'lucide-react';
+import { CheckCircle, Circle, AlertTriangle, Plus, Clock } from 'lucide-react';
 
 interface TimelineViewProps {
   tasks: TimelineTask[];

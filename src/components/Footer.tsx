@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Github } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   return (

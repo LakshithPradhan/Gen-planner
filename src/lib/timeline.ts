@@ -1,4 +1,5 @@
 import { TimelineTask } from '../types/plan';
+import { addDaysToDateOnly } from './dateOnly';
 
 export interface ScaledTimelineResult {
   tasks: TimelineTask[];
@@ -21,8 +22,6 @@ export function scaleTimelineTasks(
   targetDateStr: string
 ): ScaledTimelineResult {
   const safeDays = Math.max(1, daysLeft);
-  const targetDate = new Date(targetDateStr);
-
   // Determine standard reference span from tasks (or default 120 days)
   const maxOriginalDays = Math.max(
     ...tasks.map((t) => t.daysBeforeEvent || 0),
@@ -38,9 +37,7 @@ export function scaleTimelineTasks(
     const scaledDaysBefore = Math.max(0, Math.round(originalDays * compressionRatio));
 
     // Calculate concrete target due date
-    const taskDueDate = new Date(targetDate);
-    taskDueDate.setDate(targetDate.getDate() - scaledDaysBefore);
-    const dueDateStr = taskDueDate.toISOString().split('T')[0];
+    const dueDateStr = addDaysToDateOnly(targetDateStr, -scaledDaysBefore);
 
     // Urgent if within 5 days of today or less than 15% of remaining window
     const isUrgent =
